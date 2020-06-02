@@ -12,7 +12,21 @@ const settings = {
     },
     game: {
         presetsDirName:    "presets",
-        defaultFrameTime:  500
+        defaultFrameTime:  500,
+        aliveCellChar:     "◘",
+        deadCellChar:      " ",
+        border: {
+            horChar:   "─",
+            verChar:   "│",
+            cornerTL:  "┌",
+            cornerTR:  "┐",
+            cornerBR:  "┘",
+            cornerBL:  "└"
+        },
+        padding: {
+            horizontal: [1, 1],
+            vertical: [1, 4]
+        }
     }
 };
 

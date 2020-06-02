@@ -7,9 +7,10 @@ const settings = require("./settings");
 
 require("keypress")(process.stdin);
 
-const dbg = true;
+const dbg = false;
 var field = [];
 var frameTime = settings.game.defaultFrameTime;
+var gameActive = false, gamePaused = true;
 
 
 //#MARKER init
@@ -78,20 +79,31 @@ function init()
     mp.open();
 }
 
+//#MARKER game
 /**
- * Recalculates and adjusts for a resized terminal
+ * Controls the recalculation of certain things when terminal size was changed
  */
 function recalcSize()
 {
-    console.log(`Terminal size: ${process.stdout.columns}x${process.stdout.rows} - TTY? ${process.stdout.isTTY}`);
+    if(dbg) console.log(`Terminal size: ${process.stdout.columns}x${process.stdout.rows} - TTY? ${process.stdout.isTTY}`);
+
+    if(gameActive)
+        drawGame(field);
+
+    if(!process.stdout.isTTY)
+    {
+        console.log(`Couldn't find a suitable TTY terminal. Please make sure you are using the latest version of your operating system or try switching to a different default terminal.`);
+        process.exit(1);
+    }
 }
 
 /**
- * Registers the async listeners for input
+ * Returns the size of the terminal in columns and rows
+ * @returns {Array<Number>} [width, height]
  */
-function registerControls()
+function getTerminalSize()
 {
-
+    return [process.stdout.columns, process.stdout.rows] || [0, 0]; 
 }
 
 /**
@@ -105,17 +117,20 @@ function startGame(paused, name, fieldW, fieldH)
 {
     if(dbg) console.log(`\n\n${jsl.colors.fg.green}Starting game.${jsl.colors.rst}\nSession: ${name} [${fieldW}x${fieldH}] - Paused: ${paused}`);
 
-    console.log(JSON.stringify(field, null, 4));
+    // console.log(JSON.stringify(field, null, 4));
 
     process.stdin.removeAllListeners();
     registerControls();
 
-    drawGame(field);
+    gameActive = true;
+    gamePaused = paused;
+
+    drawGame(field, true, name);
     let calcFrame = () => {
         calcNextFrame(field).then(nextField => {
             setTimeout(() => {
                 field = nextField;
-                drawGame(nextField);
+                drawGame(nextField, false, name);
                 calcFrame();
             }, frameTime);
         });
@@ -133,6 +148,7 @@ function startGame(paused, name, fieldW, fieldH)
  */
 function calcNextFrame(grid)
 {
+    let newGrid = [];
     return new Promise((resolve, reject) => {
         // TODO: game logic in here
         /*
@@ -142,17 +158,96 @@ function calcNextFrame(grid)
             2 - Any dead cell with three live neighbours becomes a live cell.
             3 - All other live cells die in the next generation. Similarly, all other dead cells stay dead.
         */
-        return resolve();
+        return resolve(newGrid);
     });
 }
 
 /**
- * Draws the game
- * @param {Array<Number>} grid 
+ * Draws a frame to the terminal
+ * @param {Array<Number>} pattern 
+ * @param {Boolean} [initial] Set to true to exempt frame from pause check
+ * @param {String} [name] The name of the session
  */
-function drawGame(grid)
+function drawGame(pattern, initial, name)
 {
+    if(gamePaused && initial !== true)
+        return;
 
+    let size = getTerminalSize();
+    let w = size[0];
+    let h = size[1];
+
+    let horPadding = settings.game.padding.horizontal;
+    let verPadding = settings.game.padding.vertical;
+
+    let actualSize = [(w - horPadding.reduce((acc, val) => acc += val)), (h - verPadding.reduce((acc, val) => acc += val))];
+
+    if(name && typeof name == "string" && name.length > 0)
+        process.stdout.write(`${jsl.colors.fg.cyan}${name} ${jsl.colors.fg.yellow}[${actualSize[0]}x${actualSize[1]}]${jsl.colors.rst}\n`);
+
+    //#SECTION apply padding at the top
+    for(let i = 0; i < (verPadding[0] - 1); i++)
+        process.stdout.write("\n");
+
+    //#SECTION get padding at the left
+    let lPad = "";
+    for(let i = 0; i < (horPadding[0] - 1); i++)
+        lPad += " ";
+    
+    //#SECTION draw top row
+    for(let i = 0; i < actualSize[0]; i++)
+    {
+        if(i == 0)
+            process.stdout.write(settings.game.border.cornerTL);
+        else if(i == (actualSize[0] - 1))
+            process.stdout.write(settings.game.border.cornerTR + "\n");
+        else
+            process.stdout.write(settings.game.border.horChar);
+    }
+    
+    //#SECTION draw rows
+    for(let i = 0; i < actualSize[1]; i++)
+    {
+        process.stdout.write(`${lPad}${settings.game.border.verChar}`);
+        
+        for(let j = 0; j < (actualSize[0] - 2); j++)
+        {
+            if(pattern[i] == undefined || pattern[i][j] == undefined)
+            {
+                process.stdout.write(settings.game.deadCellChar);
+                continue;
+            }
+
+            process.stdout.write(pattern[i][j] == 1 ? settings.game.aliveCellChar : settings.game.deadCellChar);
+        }
+
+        process.stdout.write(`${settings.game.border.verChar}\n`);
+    }
+
+    //#SECTION draw bottom row
+    for(let i = 0; i < actualSize[0]; i++)
+    {
+        if(i == 0)
+            process.stdout.write(settings.game.border.cornerBL);
+        else if(i == (actualSize[0] - 1))
+            process.stdout.write(settings.game.border.cornerBR + "\n");
+        else
+            process.stdout.write(settings.game.border.horChar);
+    }
+
+    if(!gamePaused)
+        process.stdout.write(`\n[Space] Pause & Modify - [Escape] Menu `);
+    else
+        process.stdout.write(`\n[Space] Play - [Escape] Menu `);
+
+    // pattern.forEach(row => {
+    //     console.log(`${lPad}${settings.game.border.verChar}`);
+    // });
+
+    // console.log(`\nDrawing frame. TTY size: ${size.join("x")} - Field size: ${actualSize.join("x")}`);
+
+    //DEBUG:
+    process.exit(0);
 }
 
 /**
@@ -174,6 +269,44 @@ function aboutGame()
     });
 }
 
+//#MARKER events
+/**
+ * Registers the async listeners for input during gameplay
+ */
+function registerControls()
+{
+    process.stdin.setRawMode(true);
+
+    process.stdin.on("keypress", (char, key) => {
+        if(!key)
+            return;
+        
+        switch(key.name)
+        {
+            case "space":
+                gamePaused = !gamePaused;
+            break;
+            case "c":
+                if(key.ctrl === true)
+                {
+                    clearKP();
+                    process.exit(0);
+                }
+            break;
+        }
+    });
+    process.stdin.resume();
+}
+
+/**
+ * Removes all listeners that have been added with `registerControls()`
+ */
+function removeControlEvents()
+{
+
+}
+
+//#MARKER menus
 /**
  * Displays the preset selector
  */
@@ -223,6 +356,7 @@ function presetSelector()
                 break;
                 case "return":
                     {
+                        console.log("\n");
                         let selPresetPath = presets[currentListIdx];
                         let selData = JSON.parse(fs.readFileSync(join(presetsDir, selPresetPath)).toString());
 
@@ -295,7 +429,7 @@ function presetSelector()
 function loadPreset(name, size, pattern)
 {
     field = pattern;
-    startGame(true, name, size[0], size[1]);
+    startGame(true, `Preset: ${name}`, size[0], size[1]);
 }
 
 /**
@@ -306,6 +440,7 @@ function getCurrentPresetsURL()
     return "[[Not implemented yet]]";
 }
 
+//#MARKER misc
 /**
  * Clears the console
  */
@@ -316,6 +451,8 @@ function clearConsole()
         console.log(`\n\n\n--------------------------------------------------\n`);
         return;
     }
+    console.clear();
+    console.log("\n\n\n");
     console.clear();
 }
 
