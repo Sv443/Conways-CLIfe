@@ -123,7 +123,7 @@ function startGame(paused, name, fieldW, fieldH)
     registerControls();
 
     gameActive = true;
-    gamePaused = paused;
+    gamePaused = false //paused; //DEBUG
 
     drawGame(field, true, name);
     let calcFrame = () => {
@@ -150,14 +150,82 @@ function calcNextFrame(grid)
 {
     let newGrid = [];
     return new Promise((resolve, reject) => {
-        // TODO: game logic in here
         /*
             Rules:
 
-            1 - Any live cell with two or three live neighbours survives.
-            2 - Any dead cell with three live neighbours becomes a live cell.
-            3 - All other live cells die in the next generation. Similarly, all other dead cells stay dead.
+            1 - Births: Each dead cell adjacent to exactly three live neighbors will become live in the next generation.
+            2 - Death by isolation: Each live cell with one or fewer live neighbors will die in the next generation.
+            3 - Death by overcrowding: Each live cell with four or more live neighbors will die in the next generation.
+            4 - Survival: Each live cell with either two or three live neighbors will remain alive for the next generation.
         */
+
+        for(let x = 0; x < grid.length; x++)
+        {
+            newGrid[x] = [];
+
+            for(let y = 0; y < grid[x].length; y++)
+            {
+                let cell = grid[x][y];
+                let gridWidth = grid[x].length;
+                let gridHeight = grid.length;
+                let adjacentCells = [];
+
+                // dynamically pushing across dimensions in an array is fun :) 🔫
+
+                //#SECTION check adjacent cells - TODO: this seems to be a bit bugged
+                if(x - 1 >= 0 && y - 1 >= 0)
+                    adjacentCells.push(grid[x - 1][y - 1]); // NW
+                if(x - 1 >= 0)
+                    adjacentCells.push(grid[x - 1][y]); // N
+                if(x - 1 >= 0 && y + 1 > gridWidth)
+                    adjacentCells.push(grid[x - 1][y + 1]); // NE
+                if(y - 1 >= 0)
+                    adjacentCells.push(grid[x][y - 1]); // W
+                if(y + 1 < gridWidth)
+                    adjacentCells.push(grid[x][y + 1]); // E
+                if(x + 1 > gridHeight && y - 1 >= 0)
+                    adjacentCells.push(grid[x + 1][y - 1]); // SW
+                if(x + 1 > gridHeight)
+                    adjacentCells.push(grid[x + 1][y]); // S
+                if(x + 1 > gridHeight && y + 1 > gridWidth)
+                    adjacentCells.push(grid[x + 1][y + 1]); // SE
+
+                let aliveAndAdjacent = parseInt(adjacentCells.reduce((acc, val) => acc += val));
+
+                if(isNaN(aliveAndAdjacent))
+                    continue;
+                    
+                //#SECTION game rules
+                let die = false;
+                let resurrect = false;
+
+                if(cell == 1 && (aliveAndAdjacent == 2 || aliveAndAdjacent == 3)) // 4 - Survival: Each live cell with either two or three live neighbors will remain alive for the next generation.
+                    die = false;
+                if(cell == 1 && aliveAndAdjacent <= 1 || aliveAndAdjacent >= 4) // 2+3 - Death by isolation: Each live cell with one or fewer live neighbors will die in the next generation. - Death by overcrowding: Each live cell with four or more live neighbors will die in the next generation.
+                    die = true;
+                
+                if(aliveAndAdjacent == 3 && cell == 0)
+                    resurrect = true; // 1 - Births: Each dead cell adjacent to exactly three live neighbors will become live in the next generation.
+
+                let newCell = cell;
+
+                if(cell == 1 && die)
+                    newCell = 0;
+                
+                if(cell == 0 && resurrect)
+                    newCell = 1;
+                    
+                newGrid[x].push(newCell);
+
+                if(dbg) console.log(`Iterating on row ${x}, cell ${y} (${grid[x][y] == 1 ? "ALV" : "DED"}) - adjacent: ${aliveAndAdjacent} ${die ? "DIE " : ""}${resurrect ? "RES " : ""}${!die && !resurrect ? "ALV " : ""}`);
+            }
+            // process.exit();
+            if(dbg) console.log(`> Processing row ${x}`);
+        }
+
+        // fs.writeFileSync("./d.json", JSON.stringify(newGrid, null, 4))
+        // process.exit()
+
         return resolve(newGrid);
     });
 }
@@ -204,10 +272,13 @@ function drawGame(pattern, initial, name)
         else
             process.stdout.write(settings.game.border.horChar);
     }
+
+    field = JSON.parse("[]");
     
     //#SECTION draw rows
     for(let i = 0; i < actualSize[1]; i++)
     {
+        field.push([]);
         process.stdout.write(`${lPad}${settings.game.border.verChar}`);
         
         for(let j = 0; j < (actualSize[0] - 2); j++)
@@ -215,10 +286,12 @@ function drawGame(pattern, initial, name)
             if(pattern[i] == undefined || pattern[i][j] == undefined)
             {
                 process.stdout.write(settings.game.deadCellChar);
+                field[i].push(0);
                 continue;
             }
 
             process.stdout.write(pattern[i][j] == 1 ? settings.game.aliveCellChar : settings.game.deadCellChar);
+            field[i].push(pattern[i][j]);
         }
 
         process.stdout.write(`${settings.game.border.verChar}\n`);
@@ -247,7 +320,7 @@ function drawGame(pattern, initial, name)
     // console.log(`\nDrawing frame. TTY size: ${size.join("x")} - Field size: ${actualSize.join("x")}`);
 
     //DEBUG:
-    process.exit(0);
+    // process.exit(0);
 }
 
 /**
@@ -289,7 +362,6 @@ function registerControls()
             case "c":
                 if(key.ctrl === true)
                 {
-                    clearKP();
                     process.exit(0);
                 }
             break;
@@ -446,7 +518,7 @@ function getCurrentPresetsURL()
  */
 function clearConsole()
 {
-    if(dbg)
+    if(!dbg) //dbg
     {
         console.log(`\n\n\n--------------------------------------------------\n`);
         return;
