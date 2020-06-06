@@ -1,0 +1,10 @@
+-------------------------------
+Conway's Game of CLIfe by Sv443
+Version 0.1.0
+-------------------------------
+
+
+[CURRENT: 0.1.0] - First Release
+    - [num] presets
+    - Live editor
+    - Save custom presets made in the editor

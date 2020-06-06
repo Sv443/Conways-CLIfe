@@ -1,7 +1,6 @@
 const jsl = require("svjsl");
 const fs = require("fs");
 const { resolve, join } = require("path");
-const readline = require("readline");
 
 const settings = require("./settings");
 
@@ -45,13 +44,13 @@ function init()
 
             switch(parseInt(res[0].key))
             {
-                case 1:
+                case 1: // "Presets"
                     presetSelector();
                 break;
-                case 2:
+                case 2: // "Editor"
                     startGame(true);
                 break;
-                case 3:
+                case 3: // "About"
                     aboutGame();
                 break;
             }
@@ -119,14 +118,19 @@ function startGame(paused, name, fieldW, fieldH)
 
     // console.log(JSON.stringify(field, null, 4));
 
-    process.stdin.removeAllListeners();
+    process.stdin.removeAllListeners(["keypress"]);
     registerControls();
 
     gameActive = true;
-    gamePaused = false //paused; //DEBUG
+    gamePaused = true;
 
     drawGame(field, true, name);
     let calcFrame = () => {
+        if(dbg) console.log(`Frame iteration. Paused: ${gamePaused}`);
+
+        if(!gameActive)
+            return;
+
         calcNextFrame(field).then(nextField => {
             setTimeout(() => {
                 field = nextField;
@@ -150,6 +154,10 @@ function calcNextFrame(grid)
 {
     let newGrid = [];
     return new Promise((resolve, reject) => {
+        if(gamePaused)
+            return resolve(grid);
+
+        // TODO: something here is fucky, pls fix thx
         /*
             Rules:
 
@@ -172,7 +180,7 @@ function calcNextFrame(grid)
 
                 // dynamically pushing across dimensions in an array is fun :) 🔫
 
-                //#SECTION check adjacent cells - TODO: this seems to be a bit bugged
+                //#SECTION check adjacent cells
                 if(x - 1 >= 0 && y - 1 >= 0)
                     adjacentCells.push(grid[x - 1][y - 1]); // NW
                 if(x - 1 >= 0)
@@ -238,6 +246,8 @@ function calcNextFrame(grid)
  */
 function drawGame(pattern, initial, name)
 {
+    // TODO: push all to array and then write to console at once so there's no delays when drawing the graphics
+
     if(gamePaused && initial !== true)
         return;
 
@@ -308,6 +318,7 @@ function drawGame(pattern, initial, name)
             process.stdout.write(settings.game.border.horChar);
     }
 
+    // TODO: frame doesn't get redrawn when game is paused -> text is not shown properly
     if(!gamePaused)
         process.stdout.write(`\n[Space] Pause & Modify - [Escape] Menu `);
     else
@@ -350,20 +361,35 @@ function registerControls()
 {
     process.stdin.setRawMode(true);
 
+    let onCooldown = false;
+
     process.stdin.on("keypress", (char, key) => {
-        if(!key)
+        jsl.unused(char);
+        
+        if(onCooldown || !key)
             return;
+
+        onCooldown = true;
+        setTimeout(() => {
+            onCooldown = false;
+        }, 100);
         
         switch(key.name)
         {
-            case "space":
+            case "space": // pause / unpause
                 gamePaused = !gamePaused;
+                jsl.unused(); // so I can put a breakpoint here
             break;
-            case "c":
+            case "c": // exit process if CTRL+C is pressed
                 if(key.ctrl === true)
-                {
                     process.exit(0);
-                }
+            break;
+            case "escape":
+                process.stdin.removeAllListeners(["keypress"]);
+                gameActive = false;
+                gamePaused = true;
+                field = [];
+                init();
             break;
         }
     });
@@ -375,7 +401,7 @@ function registerControls()
  */
 function removeControlEvents()
 {
-
+    process.stdin.removeAllListeners(["keypress"]);
 }
 
 //#MARKER menus
@@ -393,7 +419,7 @@ function presetSelector()
     if(Array.isArray(presets) && presets.length > 0)
     {
         // if(dbg) console.log(`${jsl.colors.fg.red}Registering keypress evt${jsl.colors.rst}`);
-        let kp = process.stdin.on("keypress", (ch, key) => {
+        let kp = (ch, key) => {
             if(onCooldown || !key)
                 return;
 
@@ -432,6 +458,8 @@ function presetSelector()
                         let selPresetPath = presets[currentListIdx];
                         let selData = JSON.parse(fs.readFileSync(join(presetsDir, selPresetPath)).toString());
 
+                        clearKP();
+
                         loadPreset(selData.name, selData.size, selData.pattern);
                         
                         break;
@@ -440,11 +468,13 @@ function presetSelector()
                     // if(dbg) console.log(`Unknown keypress: ${JSON.stringify(key)}`);
                 break;
             }
-        });
+        };
+
+        process.stdin.on("keypress", kp);
 
         let clearKP = () => {
             process.stdin.pause();
-            process.stdin.removeAllListeners();
+            process.stdin.removeAllListeners(["keypress"]);
         };
 
         process.stdin.setRawMode(true);
@@ -518,6 +548,8 @@ function getCurrentPresetsURL()
  */
 function clearConsole()
 {
+    return console.clear();
+
     if(!dbg) //dbg
     {
         console.log(`\n\n\n--------------------------------------------------\n`);
