@@ -96,7 +96,7 @@ function init()
             },
             {
                 key: "2",
-                description: "Custom"
+                description: "Custom [WIP]"
             },
             {
                 key: "3",
