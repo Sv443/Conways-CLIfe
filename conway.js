@@ -6,7 +6,7 @@ const settings = require("./settings");
 
 require("keypress")(process.stdin);
 
-const dbg = false;
+const dbg = true;
 var field = [];
 var frameTime = settings.game.defaultFrameTime;
 var gameActive = false, gamePaused = true;
@@ -50,7 +50,12 @@ function init()
                 case 2: // "Editor"
                     startGame(true);
                 break;
-                case 3: // "About"
+                case 3: // "Random"
+                    console.log("\nRandom generation is WIP\n");
+                    // startRandomGame(); // TODO:
+                    jsl.pause().then(() => init());
+                break;
+                case 4: // "About"
                     aboutGame();
                 break;
             }
@@ -66,10 +71,14 @@ function init()
             },
             {
                 key: "2",
-                description: "Editor\n"
+                description: "Editor"
             },
             {
                 key: "3",
+                description: "Random\n"
+            },
+            {
+                key: "4",
                 description: "About"
             }
         ]
@@ -167,6 +176,8 @@ function calcNextFrame(grid)
             4 - Survival: Each live cell with either two or three live neighbors will remain alive for the next generation.
         */
 
+        let timeS = new Date().getTime();
+
         for(let x = 0; x < grid.length; x++)
         {
             newGrid[x] = [];
@@ -185,17 +196,17 @@ function calcNextFrame(grid)
                     adjacentCells.push(grid[x - 1][y - 1]); // NW
                 if(x - 1 >= 0)
                     adjacentCells.push(grid[x - 1][y]); // N
-                if(x - 1 >= 0 && y + 1 > gridWidth)
+                if(x - 1 >= 0 && y + 1 < gridWidth)
                     adjacentCells.push(grid[x - 1][y + 1]); // NE
                 if(y - 1 >= 0)
                     adjacentCells.push(grid[x][y - 1]); // W
                 if(y + 1 < gridWidth)
                     adjacentCells.push(grid[x][y + 1]); // E
-                if(x + 1 > gridHeight && y - 1 >= 0)
+                if(x + 1 < gridHeight && y - 1 >= 0)
                     adjacentCells.push(grid[x + 1][y - 1]); // SW
-                if(x + 1 > gridHeight)
+                if(x + 1 < gridHeight)
                     adjacentCells.push(grid[x + 1][y]); // S
-                if(x + 1 > gridHeight && y + 1 > gridWidth)
+                if(x + 1 < gridHeight && y + 1 < gridWidth)
                     adjacentCells.push(grid[x + 1][y + 1]); // SE
 
                 let aliveAndAdjacent = parseInt(adjacentCells.reduce((acc, val) => acc += val));
@@ -224,15 +235,14 @@ function calcNextFrame(grid)
                     newCell = 1;
                     
                 newGrid[x].push(newCell);
-
-                if(dbg) console.log(`Iterating on row ${x}, cell ${y} (${grid[x][y] == 1 ? "ALV" : "DED"}) - adjacent: ${aliveAndAdjacent} ${die ? "DIE " : ""}${resurrect ? "RES " : ""}${!die && !resurrect ? "ALV " : ""}`);
             }
-            // process.exit();
-            if(dbg) console.log(`> Processing row ${x}`);
         }
 
         // fs.writeFileSync("./d.json", JSON.stringify(newGrid, null, 4))
         // process.exit()
+
+        let timeDelta = new Date().getTime() - timeS;
+        if(dbg) console.log(`calc Δt: ${timeDelta}ms`);
 
         return resolve(newGrid);
     });
@@ -433,12 +443,14 @@ function presetSelector()
 
             switch(key.name)
             {
+                case "w":
                 case "up":
                     if(currentListIdx > 0)
                         currentListIdx--;
 
                     redisplayPresets();
                 break;
+                case "s":
                 case "down":
                     if(currentListIdx < (presets.length - 1))
                         currentListIdx++;
@@ -452,6 +464,7 @@ function presetSelector()
                         process.exit(0);
                     }
                 break;
+                case "space":
                 case "return":
                     {
                         console.log("\n");
@@ -460,7 +473,7 @@ function presetSelector()
 
                         clearKP();
 
-                        loadPreset(selData.name, selData.size, selData.pattern);
+                        setTimeout(() => loadPreset(selData.name, selData.size, selData.pattern), 50);
                         
                         break;
                     }
@@ -483,7 +496,7 @@ function presetSelector()
         let redisplayPresets = () => {
             clearConsole();
 
-            console.log("Presets found in the presets folder:\n");
+            console.log(`${presets.length} presets found:\n`);
 
             presets.forEach((preset, i) => {
                 // console.log(`${jsl.colors.fg.yellow}DBG - clidx: ${currentListIdx} - i: ${i}${jsl.colors.rst}`);
@@ -508,7 +521,7 @@ function presetSelector()
                 }
             });
 
-            process.stdout.write(`\n\n\n[▲ ▼] Navigate - [↵] Select `);
+            process.stdout.write(`\n\n\n[▲ ▼] Navigate - [Enter] Select `);
         };
 
         return redisplayPresets();
@@ -549,15 +562,14 @@ function getCurrentPresetsURL()
 function clearConsole()
 {
     return console.clear();
-
-    if(!dbg) //dbg
-    {
-        console.log(`\n\n\n--------------------------------------------------\n`);
-        return;
-    }
-    console.clear();
-    console.log("\n\n\n");
-    console.clear();
+    // if(!dbg) //dbg
+    // {
+    //     console.log(`\n\n\n--------------------------------------------------\n`);
+    //     return;
+    // }
+    // console.clear();
+    // console.log("\n\n\n");
+    // console.clear();
 }
 
 
