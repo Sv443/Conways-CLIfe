@@ -26,7 +26,9 @@ const settings = {
         padding: {
             horizontal: [1, 1],  // how many rows of padding should be at the [top, bottom]
             vertical: [1, 4]     // how many rows of padding should be at the [left, right]
-        }
+        },
+        speedChangeFactor: 0.5,  // by how much the game speed changes when incrementing or decrementing once
+        maxSpeed: 5.0            // maximum game speed
     }
 };
 

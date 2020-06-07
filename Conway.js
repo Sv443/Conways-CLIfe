@@ -6,10 +6,11 @@ const settings = require("./settings");
 
 require("keypress")(process.stdin);
 
-const dbg = true;
+const dbg = false;
 var field = [];
 var frameTime = settings.game.defaultFrameTime;
 var gameActive = false, gamePaused = true;
+var gameSpeed = 1.0;
 
 
 //#MARKER init
@@ -123,7 +124,7 @@ function getTerminalSize()
  */
 function startGame(paused, name, fieldW, fieldH)
 {
-    if(dbg) console.log(`\n\n${jsl.colors.fg.green}Starting game.${jsl.colors.rst}\nSession: ${name} [${fieldW}x${fieldH}] - Paused: ${paused}`);
+    if(dbg) console.log(`\n\n${jsl.colors.fg.green}Starting game.${jsl.colors.rst}\nSession: ${name} [${fieldW}x${fieldH}]`);
 
     // console.log(JSON.stringify(field, null, 4));
 
@@ -141,11 +142,12 @@ function startGame(paused, name, fieldW, fieldH)
             return;
 
         calcNextFrame(field).then(nextField => {
+            let curFrameTime = frameTime * gameSpeed;
             setTimeout(() => {
                 field = nextField;
                 drawGame(nextField, false, name);
                 calcFrame();
-            }, frameTime);
+            }, curFrameTime);
         });
     };
 
@@ -271,7 +273,7 @@ function drawGame(pattern, initial, name)
     let actualSize = [(w - horPadding.reduce((acc, val) => acc += val)), (h - verPadding.reduce((acc, val) => acc += val))];
 
     if(name && typeof name == "string" && name.length > 0)
-        process.stdout.write(`${jsl.colors.fg.cyan}${name} ${jsl.colors.fg.yellow}[${actualSize[0]}x${actualSize[1]}]${jsl.colors.rst}\n`);
+        process.stdout.write(`${jsl.colors.fg.cyan}${name} ${jsl.colors.fg.yellow}[${actualSize[0]}x${actualSize[1]}] ${gameSpeed == 1.0 ? "1" : gameSpeed.toFixed(2)}x ${gamePaused ? "- Paused " : ""}${jsl.colors.rst}\n`);
 
     //#SECTION apply padding at the top
     for(let i = 0; i < (verPadding[0] - 1); i++)
@@ -330,9 +332,9 @@ function drawGame(pattern, initial, name)
 
     // TODO: frame doesn't get redrawn when game is paused -> text is not shown properly
     if(!gamePaused)
-        process.stdout.write(`\n[Space] Pause & Modify - [Escape] Menu `);
+        process.stdout.write(`\n[Space] Pause & Modify - [◄ ►] Change Speed - [Escape] Menu `);
     else
-        process.stdout.write(`\n[Space] Play - [Escape] Menu `);
+        process.stdout.write(`\n[Space] Play - [◄ ►] Change Speed - [Escape] Menu `);
 
     // pattern.forEach(row => {
     //     console.log(`${lPad}${settings.game.border.verChar}`);
@@ -463,6 +465,16 @@ function presetSelector()
                         clearKP();
                         process.exit(0);
                     }
+                break;
+                case "a":
+                case "left":
+                    if(gameSpeed > settings.game.speedChangeFactor)
+                        gameSpeed -= settings.game.speedChangeFactor;
+                break;
+                case "d":
+                case "right":
+                    if(gameSpeed < settings.game.maxSpeed)
+                        gameSpeed += settings.game.speedChangeFactor;
                 break;
                 case "space":
                 case "return":
