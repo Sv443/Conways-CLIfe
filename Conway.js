@@ -396,6 +396,16 @@ function registerControls()
                 if(key.ctrl === true)
                     process.exit(0);
             break;
+            case "a":
+            case "left":
+                if(gameSpeed > settings.game.speedChangeFactor)
+                    gameSpeed -= settings.game.speedChangeFactor;
+            break;
+            case "d":
+            case "right":
+                if(gameSpeed < settings.game.maxSpeed)
+                    gameSpeed += settings.game.speedChangeFactor;
+            break;
             case "escape":
                 process.stdin.removeAllListeners(["keypress"]);
                 gameActive = false;
@@ -465,16 +475,6 @@ function presetSelector()
                         clearKP();
                         process.exit(0);
                     }
-                break;
-                case "a":
-                case "left":
-                    if(gameSpeed > settings.game.speedChangeFactor)
-                        gameSpeed -= settings.game.speedChangeFactor;
-                break;
-                case "d":
-                case "right":
-                    if(gameSpeed < settings.game.maxSpeed)
-                        gameSpeed += settings.game.speedChangeFactor;
                 break;
                 case "space":
                 case "return":
