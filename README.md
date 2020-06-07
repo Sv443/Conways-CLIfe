@@ -1,6 +1,8 @@
 # Conways-CLIfe
 Conway's Game of Life in the Command Line Interface.  
 Features a bunch of premade presets and an editor to create your own presets.  
+
+### This game is part of my [CLI game collection](https://github.com/Sv443/CLI-Games-Collection)
   
 ### Rules of Conway's game of life:
 |  |  |
@@ -12,4 +14,7 @@ Features a bunch of premade presets and an editor to create your own presets.
 
 ## Steps to build:
 
-### This game is part of my [CLI game collection](https://github.com/Sv443/CLI-Games-Collection)
+## Dependencies:
+- keypress
+- noisejs
+- svjsl

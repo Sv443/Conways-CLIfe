@@ -1,9 +1,12 @@
+"use-strict";
+
 const jsl = require("svjsl");
 const fs = require("fs");
 const { resolve, join } = require("path");
 
 const settings = require("./settings");
 
+const perlin = require("perlin-noise");
 require("keypress")(process.stdin);
 
 const dbg = false;
@@ -11,6 +14,9 @@ var field = [];
 var frameTime = settings.game.defaultFrameTime;
 var gameActive = false, gamePaused = true;
 var gameSpeed = 1.0;
+var gameName = "";
+var currentIteration = 0;
+
 
 
 //#MARKER init
@@ -20,14 +26,23 @@ var gameSpeed = 1.0;
  */
 function preInit()
 {
-    process.stdin.setRawMode();
+    process.on("SIGINT", beforeShutdown);
+    process.on("SIGTERM", beforeShutdown);
+
+    process.stdin.setRawMode(true);
 
     process.stdout.on("resize", () => {
-        recalcSize();
+        recalcSize(true);
     });
     recalcSize();
 
     init();
+}
+
+function beforeShutdown()
+{
+    console.log(`${jsl.colors.fg.yellow}Goodbye.${jsl.colors.rst}`);
+    process.exit(0);
 }
 
 /**
@@ -35,6 +50,11 @@ function preInit()
  */
 function init()
 {
+    setTerminalTitle(`${settings.info.name} - Menu`);
+
+    currentIteration = 0;
+    field = [];
+
     let mp = new jsl.MenuPrompt({
         autoSubmit: true,
         exitKey: "x",
@@ -49,14 +69,18 @@ function init()
                     presetSelector();
                 break;
                 case 2: // "Editor"
-                    startGame(true);
+                    field = [];
+                    startGame(true, "Custom");
                 break;
                 case 3: // "Random"
-                    console.log("\nRandom generation is WIP\n");
-                    // startRandomGame(); // TODO:
+                    // randomSelector(); // TODO:
+                    startRandomGame(true, "Random", "perlin");
+                break;
+                case 4: // Settings
+                    console.log("\nSettings are WIP\n");
                     jsl.pause().then(() => init());
                 break;
-                case 4: // "About"
+                case 5: // "About"
                     aboutGame();
                 break;
             }
@@ -72,14 +96,18 @@ function init()
             },
             {
                 key: "2",
-                description: "Editor"
+                description: "Custom"
             },
             {
                 key: "3",
-                description: "Random\n"
+                description: "Random [WIP]\n"
             },
             {
                 key: "4",
+                description: "Settings [WIP]"
+            },
+            {
+                key: "5",
                 description: "About"
             }
         ]
@@ -90,20 +118,31 @@ function init()
 
 //#MARKER game
 /**
- * Controls the recalculation of certain things when terminal size was changed
+ * Controls the recalculation of certain things when terminal size was changed.  
+ * Can also be called to just redraw the game.
+ * @param {Boolean} ignorePaused
  */
-function recalcSize()
+function recalcSize(ignorePaused)
 {
     if(dbg) console.log(`Terminal size: ${process.stdout.columns}x${process.stdout.rows} - TTY? ${process.stdout.isTTY}`);
 
     if(gameActive)
-        drawGame(field);
+        drawGame(field, false, gameName, ignorePaused);
 
     if(!process.stdout.isTTY)
     {
         console.log(`Couldn't find a suitable TTY terminal. Please make sure you are using the latest version of your operating system or try switching to a different default terminal.`);
         process.exit(1);
     }
+}
+
+/**
+ * Redraws the current frame.
+ * @param {Boolean} ignorePaused
+ */
+function redraw(ignorePaused)
+{
+    recalcSize(ignorePaused);
 }
 
 /**
@@ -126,13 +165,16 @@ function startGame(paused, name, fieldW, fieldH)
 {
     if(dbg) console.log(`\n\n${jsl.colors.fg.green}Starting game.${jsl.colors.rst}\nSession: ${name} [${fieldW}x${fieldH}]`);
 
+    gameName = name;
+    currentIteration = 0;
+
     // console.log(JSON.stringify(field, null, 4));
 
     process.stdin.removeAllListeners(["keypress"]);
     registerControls();
 
     gameActive = true;
-    gamePaused = true;
+    gamePaused = paused || true;
 
     drawGame(field, true, name);
     let calcFrame = () => {
@@ -142,7 +184,7 @@ function startGame(paused, name, fieldW, fieldH)
             return;
 
         calcNextFrame(field).then(nextField => {
-            let curFrameTime = frameTime * gameSpeed;
+            let curFrameTime = frameTime / gameSpeed;
             setTimeout(() => {
                 field = nextField;
                 drawGame(nextField, false, name);
@@ -157,6 +199,49 @@ function startGame(paused, name, fieldW, fieldH)
 }
 
 /**
+ * 
+ * @param {Boolean} paused 
+ * @param {String} name 
+ * @param {"perlin"|"random"|"seed"} type 
+ * @param {Number} [seed] Only needed when run in "seed" mode
+ */
+function startRandomGame(paused, name, type, seed)
+{
+    jsl.unused(seed);
+    switch(type)
+    {
+        case "perlin":
+        {
+            let actualSize = getFieldSize();
+            let noiseSampleScale = 3; // does not work well with floats, gets skewed weirdly and creates horizontal lines
+            let opts = {
+                octaveCount: 10, // 4
+                amplitude: 0.1,  // 0.1
+                persistence: 0.2 // 0.2
+            };
+            let noise = perlin.generatePerlinNoise(Math.round(actualSize[0] * noiseSampleScale), Math.round(actualSize[1] * noiseSampleScale)).map(v => Math.round(v), opts);
+            let idx = 0, outerIdx = 0;
+            let noisedGrid = [];
+
+            for(let x = 0; x < actualSize[1]; x++)
+            {
+                noisedGrid.push([]);
+                for(let y = 0; y < actualSize[0]; y++)
+                {
+                    noisedGrid[outerIdx].push(noise[Math.round(idx * Math.pow(noiseSampleScale, 2))]);
+
+                    idx++;
+                }
+                outerIdx++;
+            }
+
+            field = noisedGrid;
+            return startGame(paused, name);
+        }
+    }
+}
+
+/**
  * Calculates the next frame based on a passed grid and returns it
  * @param {Array<Number>} grid 
  * @returns {Promise<Array<Number>, String>}
@@ -165,10 +250,11 @@ function calcNextFrame(grid)
 {
     let newGrid = [];
     return new Promise((resolve, reject) => {
+        jsl.unused(reject);
+
         if(gamePaused)
             return resolve(grid);
 
-        // TODO: something here is fucky, pls fix thx
         /*
             Rules:
 
@@ -246,6 +332,8 @@ function calcNextFrame(grid)
         let timeDelta = new Date().getTime() - timeS;
         if(dbg) console.log(`calc Δt: ${timeDelta}ms`);
 
+        currentIteration++;
+
         return resolve(newGrid);
     });
 }
@@ -255,29 +343,33 @@ function calcNextFrame(grid)
  * @param {Array<Number>} pattern 
  * @param {Boolean} [initial] Set to true to exempt frame from pause check
  * @param {String} [name] The name of the session
+ * @param {Boolean} [ignorePaused]
  */
-function drawGame(pattern, initial, name)
+function drawGame(pattern, initial, name, ignorePaused)
 {
     // TODO: push all to array and then write to console at once so there's no delays when drawing the graphics
 
-    if(gamePaused && initial !== true)
+    let consoleTxt = [];
+
+    if((gamePaused && ignorePaused !== true) && initial !== true)
         return;
 
-    let size = getTerminalSize();
-    let w = size[0];
-    let h = size[1];
-
+    let actualSize = getFieldSize();
     let horPadding = settings.game.padding.horizontal;
     let verPadding = settings.game.padding.vertical;
 
-    let actualSize = [(w - horPadding.reduce((acc, val) => acc += val)), (h - verPadding.reduce((acc, val) => acc += val))];
+    consoleTxt.push("\n");
+
+    let sizeCol = jsl.colors.fg.yellow;
+    if(actualSize[0] + actualSize[1] >= 200)
+        sizeCol = jsl.colors.fg.red;
 
     if(name && typeof name == "string" && name.length > 0)
-        process.stdout.write(`${jsl.colors.fg.cyan}${name} ${jsl.colors.fg.yellow}[${actualSize[0]}x${actualSize[1]}] ${gameSpeed == 1.0 ? "1" : gameSpeed.toFixed(2)}x ${gamePaused ? "- Paused " : ""}${jsl.colors.rst}\n`);
+        consoleTxt.push(`${jsl.colors.fg.cyan}${name} ${sizeCol}[${actualSize[0]}x${actualSize[1]}]${jsl.colors.fg.yellow} ${gameSpeed == 1.0 ? "1" : gameSpeed.toFixed(1)}x ${jsl.colors.rst}-${jsl.colors.fg.yellow} i=${currentIteration} ${gamePaused ? `${jsl.colors.rst}-${jsl.colors.fg.yellow} Paused ` : ""}${jsl.colors.rst}\n`);
 
     //#SECTION apply padding at the top
     for(let i = 0; i < (verPadding[0] - 1); i++)
-        process.stdout.write("\n");
+        consoleTxt.push("\n");
 
     //#SECTION get padding at the left
     let lPad = "";
@@ -285,56 +377,69 @@ function drawGame(pattern, initial, name)
         lPad += " ";
     
     //#SECTION draw top row
+    let topRowConsole = "";
     for(let i = 0; i < actualSize[0]; i++)
     {
         if(i == 0)
-            process.stdout.write(settings.game.border.cornerTL);
+            topRowConsole += settings.game.border.cornerTL;
         else if(i == (actualSize[0] - 1))
-            process.stdout.write(settings.game.border.cornerTR + "\n");
+            topRowConsole += settings.game.border.cornerTR;
         else
-            process.stdout.write(settings.game.border.horChar);
+            topRowConsole += settings.game.border.horChar;
     }
+
+    consoleTxt.push(`${topRowConsole}\n`);
 
     field = JSON.parse("[]");
     
     //#SECTION draw rows
+    let rowConsole = "";
     for(let i = 0; i < actualSize[1]; i++)
     {
         field.push([]);
-        process.stdout.write(`${lPad}${settings.game.border.verChar}`);
+            rowConsole += `${lPad}${settings.game.border.verChar}`;
         
         for(let j = 0; j < (actualSize[0] - 2); j++)
         {
             if(pattern[i] == undefined || pattern[i][j] == undefined)
             {
-                process.stdout.write(settings.game.deadCellChar);
+                rowConsole += settings.game.deadCellChar;
                 field[i].push(0);
                 continue;
             }
 
-            process.stdout.write(pattern[i][j] == 1 ? settings.game.aliveCellChar : settings.game.deadCellChar);
+            rowConsole += (pattern[i][j] == 1 ? settings.game.aliveCellChar : settings.game.deadCellChar);
             field[i].push(pattern[i][j]);
         }
 
-        process.stdout.write(`${settings.game.border.verChar}\n`);
+        rowConsole += settings.game.border.verChar + "\n";
     }
+    consoleTxt.push(rowConsole);
 
     //#SECTION draw bottom row
+    let btmRowConsole = "";
     for(let i = 0; i < actualSize[0]; i++)
     {
         if(i == 0)
-            process.stdout.write(settings.game.border.cornerBL);
+            btmRowConsole += settings.game.border.cornerBL;
         else if(i == (actualSize[0] - 1))
-            process.stdout.write(settings.game.border.cornerBR + "\n");
+            btmRowConsole += settings.game.border.cornerBR;
         else
-            process.stdout.write(settings.game.border.horChar);
+            btmRowConsole += settings.game.border.horChar;
     }
+    consoleTxt.push(`${btmRowConsole}\n`);
 
     // TODO: frame doesn't get redrawn when game is paused -> text is not shown properly
     if(!gamePaused)
-        process.stdout.write(`\n[Space] Pause & Modify - [◄ ►] Change Speed - [Escape] Menu `);
+        consoleTxt.push(`\n[Space] Pause - [◄ ►] Change Speed - [Escape] Menu `);
     else
-        process.stdout.write(`\n[Space] Play - [◄ ►] Change Speed - [Escape] Menu `);
+        consoleTxt.push(`\n[Space] Play - [◄ ►] Change Speed - [Escape] Menu `);
+
+    let textToLog = consoleTxt.reduce((acc, val) => acc + val);
+
+    process.stdout.write(textToLog);
+
+    setTerminalTitle(`${settings.info.name} - ${name}${gamePaused ? " - Paused " : ""}`);
 
     // pattern.forEach(row => {
     //     console.log(`${lPad}${settings.game.border.verChar}`);
@@ -351,12 +456,14 @@ function drawGame(pattern, initial, name)
  */
 function aboutGame()
 {
-    console.log(`Game made by ${settings.info.authorN} - ${settings.info.authorGH}`);
-    console.log(`Version: ${settings.info.version}\n`);
+    console.log(`${jsl.colors.fg.blue}About ${settings.info.name}:${jsl.colors.rst}\n`);
+
+    console.log(`Version: ${jsl.colors.fg.yellow}${settings.info.version}${jsl.colors.rst}`);
+    console.log(`Game made by ${jsl.colors.fg.yellow}${settings.info.authorN}${jsl.colors.rst} - ${settings.info.authorGH}`);
+    console.log(`Licensed under the ${jsl.colors.fg.yellow}MIT License${jsl.colors.rst} - https://sv443.net/LICENSE\n`);
 
     console.log(`GitHub repository: ${settings.info.projGH}`);
     console.log(`Issue tracker: ${settings.info.issueTracker}`);
-    console.log(`Created from 2020/06/01 to 2020/x/x`);
 
     console.log("\n\n\n");
 
@@ -384,13 +491,13 @@ function registerControls()
         onCooldown = true;
         setTimeout(() => {
             onCooldown = false;
-        }, 100);
+        }, settings.game.inputCooldown);
         
         switch(key.name)
         {
             case "space": // pause / unpause
                 gamePaused = !gamePaused;
-                jsl.unused(); // so I can put a breakpoint here
+                redraw(true);
             break;
             case "c": // exit process if CTRL+C is pressed
                 if(key.ctrl === true)
@@ -399,12 +506,18 @@ function registerControls()
             case "a":
             case "left":
                 if(gameSpeed > settings.game.speedChangeFactor)
+                {
                     gameSpeed -= settings.game.speedChangeFactor;
+                    redraw(true);
+                }
             break;
             case "d":
             case "right":
                 if(gameSpeed < settings.game.maxSpeed)
+                {
                     gameSpeed += settings.game.speedChangeFactor;
+                    redraw(true);
+                }
             break;
             case "escape":
                 process.stdin.removeAllListeners(["keypress"]);
@@ -425,6 +538,7 @@ function removeControlEvents()
 {
     process.stdin.removeAllListeners(["keypress"]);
 }
+jsl.unused(removeControlEvents);
 
 //#MARKER menus
 /**
@@ -448,7 +562,7 @@ function presetSelector()
             onCooldown = true;
             setTimeout(() => {
                 onCooldown = false;
-            }, 100);
+            }, settings.game.inputCooldown);
 
             // if(dbg) console.log("keypress triggered");
             jsl.unused(ch);
@@ -485,10 +599,13 @@ function presetSelector()
 
                         clearKP();
 
-                        setTimeout(() => loadPreset(selData.name, selData.size, selData.pattern), 50);
+                        setTimeout(() => loadPreset(selData.name, selData.size, selData.pattern), settings.game.inputCooldown);
                         
                         break;
                     }
+                case "escape":
+                    init();
+                break;
                 default:
                     // if(dbg) console.log(`Unknown keypress: ${JSON.stringify(key)}`);
                 break;
@@ -533,7 +650,7 @@ function presetSelector()
                 }
             });
 
-            process.stdout.write(`\n\n\n[▲ ▼] Navigate - [Enter] Select `);
+            process.stdout.write(`\n\n\n[▲ ▼] Navigate - [Enter] Select - [Escape] Menu `);
         };
 
         return redisplayPresets();
@@ -573,16 +690,47 @@ function getCurrentPresetsURL()
  */
 function clearConsole()
 {
-    return console.clear();
-    // if(!dbg) //dbg
-    // {
-    //     console.log(`\n\n\n--------------------------------------------------\n`);
-    //     return;
-    // }
-    // console.clear();
-    // console.log("\n\n\n");
-    // console.clear();
+    process.stdout.clearLine();
+    process.stdout.cursorTo(0, 0);
+    process.stdout.write("\n");
+
+    try
+    {
+        if(console && console.clear && process.stdout && process.stdout.isTTY)
+            console.clear();
+        else if(console)
+            console.log("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+        else process.stdout.write("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+    }
+    catch(err)
+    {
+        return;
+    }
 }
 
+/**
+ * Sets the title of the terminal window
+ * @param {String} title
+ */
+function setTerminalTitle(title)
+{
+    process.stdout.write(`${String.fromCharCode(27)}]0;${title}${String.fromCharCode(7)}`);
+}
+
+/**
+ * Returns the game field size
+ * @returns {Array<Number>} [width, height] / [y, x]
+ */
+function getFieldSize()
+{
+    let size = getTerminalSize();
+    let w = size[0];
+    let h = size[1];
+
+    let horPadding = settings.game.padding.horizontal;
+    let verPadding = settings.game.padding.vertical;
+
+    return [(w - horPadding.reduce((acc, val) => acc += val)), (h - verPadding.reduce((acc, val) => acc += val))];
+}
 
 preInit();

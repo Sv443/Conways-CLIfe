@@ -13,7 +13,7 @@ const settings = {
     game: {
         presetsDirName:    "presets",  // name of the presets directory
         defaultFrameTime:  500,        // default time each frame / iteration stays rendered
-        aliveCellChar:     "◘",        // character of an alive cell
+        aliveCellChar:     "∙",        // character of an alive cell
         deadCellChar:      " ",        // dead cell
         border: {                      // characters that make up the border:
             horChar:   "─",
@@ -28,7 +28,8 @@ const settings = {
             vertical: [1, 4]     // how many rows of padding should be at the [left, right]
         },
         speedChangeFactor: 0.5,  // by how much the game speed changes when incrementing or decrementing once
-        maxSpeed: 5.0            // maximum game speed
+        maxSpeed: 10.0,          // maximum game speed
+        inputCooldown: 50        // how many milliseconds to wait between accepted keyboard inputs
     }
 };
 
