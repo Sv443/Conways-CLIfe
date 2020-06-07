@@ -2,7 +2,7 @@
   "name": "conwayclife",
   "version": "0.1.0",
   "description": "Conway's Game of Life in the Command Line Interface",
-  "main": "conway.js",
+  "main": "Conway.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
