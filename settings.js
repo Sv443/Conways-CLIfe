@@ -13,8 +13,8 @@ const settings = {
     game: {
         presetsDirName:    "presets",  // name of the presets directory
         defaultFrameTime:  500,        // default time each frame / iteration stays rendered
-        aliveCellChar:     "∙",        // character of an alive cell
-        deadCellChar:      " ",        // dead cell
+        aliveCellChar:     "∙",        // default character of an alive cell
+        deadCellChar:      " ",        // default character of a dead cell
         border: {                      // characters that make up the border:
             horChar:   "─",
             verChar:   "│",
@@ -24,7 +24,7 @@ const settings = {
             cornerBL:  "└"
         },
         padding: {
-            horizontal: [1, 1],  // how many rows of padding should be at the [top, bottom]
+            horizontal: [0, 0],  // how many rows of padding should be at the [top, bottom] - this is pretty broken, use with caution
             vertical: [1, 4]     // how many rows of padding should be at the [left, right]
         },
         speedChangeFactor: 0.5,  // by how much the game speed changes when incrementing or decrementing once

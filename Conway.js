@@ -16,6 +16,8 @@ var gameActive = false, gamePaused = true;
 var gameSpeed = 1.0;
 var gameName = "";
 var currentIteration = 0;
+var aliveCellChar = settings.game.aliveCellChar;
+var deadCellChar = settings.game.deadCellChar;
 
 
 
@@ -55,6 +57,24 @@ function init()
     currentIteration = 0;
     field = [];
 
+    if(fs.existsSync("./preferences.json"))
+    {
+        try
+        {
+            let usrSettings = JSON.parse(fs.readFileSync("./preferences.json").toString());
+
+            if(usrSettings)
+            {
+                aliveCellChar = usrSettings.aliveCellChar || settings.game.aliveCellChar;
+                deadCellChar = usrSettings.deadCellChar || settings.game.deadCellChar;
+            }
+        }
+        catch(err)
+        {
+            jsl.unused(err);
+        }
+    }
+
     let mp = new jsl.MenuPrompt({
         autoSubmit: true,
         exitKey: "x",
@@ -70,15 +90,17 @@ function init()
                 break;
                 case 2: // "Editor"
                     field = [];
+                    // TODO:
                     startGame(true, "Custom");
                 break;
                 case 3: // "Random"
-                    // randomSelector(); // TODO:
-                    startRandomGame(true, "Random", "perlin");
+                    randomGameSelector();
+                    // startRandomGame(true, "Random", "perlin");
                 break;
                 case 4: // Settings
-                    console.log("\nSettings are WIP\n");
-                    jsl.pause().then(() => init());
+                    settingsMenu();
+                    // console.log("\nSettings are WIP\n");
+                    // jsl.pause().then(() => init());
                 break;
                 case 5: // "About"
                     aboutGame();
@@ -100,11 +122,11 @@ function init()
             },
             {
                 key: "3",
-                description: "Random [WIP]\n"
+                description: "Random\n"
             },
             {
                 key: "4",
-                description: "Settings [WIP]"
+                description: "Settings"
             },
             {
                 key: "5",
@@ -124,6 +146,8 @@ function init()
  */
 function recalcSize(ignorePaused)
 {
+    // TODO: halt everything if terminal is too small
+
     if(dbg) console.log(`Terminal size: ${process.stdout.columns}x${process.stdout.rows} - TTY? ${process.stdout.isTTY}`);
 
     if(gameActive)
@@ -202,17 +226,19 @@ function startGame(paused, name, fieldW, fieldH)
  * 
  * @param {Boolean} paused 
  * @param {String} name 
- * @param {"perlin"|"random"|"seed"} type 
+ * @param {"perlin"|"random"} type 
  * @param {Number} [seed] Only needed when run in "seed" mode
  */
 function startRandomGame(paused, name, type, seed)
 {
+    let actualSize = getFieldSize();
+    let noisedGrid = [];
+
     jsl.unused(seed);
     switch(type)
     {
         case "perlin":
         {
-            let actualSize = getFieldSize();
             let noiseSampleScale = 3; // does not work well with floats, gets skewed weirdly and creates horizontal lines
             let opts = {
                 octaveCount: 10, // 4
@@ -220,24 +246,40 @@ function startRandomGame(paused, name, type, seed)
                 persistence: 0.2 // 0.2
             };
             let noise = perlin.generatePerlinNoise(Math.round(actualSize[0] * noiseSampleScale), Math.round(actualSize[1] * noiseSampleScale)).map(v => Math.round(v), opts);
-            let idx = 0, outerIdx = 0;
-            let noisedGrid = [];
+            let idx = 0;
 
             for(let x = 0; x < actualSize[1]; x++)
             {
                 noisedGrid.push([]);
                 for(let y = 0; y < actualSize[0]; y++)
                 {
-                    noisedGrid[outerIdx].push(noise[Math.round(idx * Math.pow(noiseSampleScale, 2))]);
+                    noisedGrid[x].push(noise[Math.round(idx * Math.pow(noiseSampleScale, 2))]);
 
                     idx++;
                 }
-                outerIdx++;
             }
 
             field = noisedGrid;
-            return startGame(paused, name);
+            return startGame(paused, `${name} (Perlin Noise)`);
         }
+        case "random":
+        {
+            for(let x = 0; x < actualSize[1]; x++)
+            {
+                noisedGrid.push([]);
+                for(let y = 0; y < actualSize[0]; y++)
+                {
+                    noisedGrid[x].push(jsl.randRange(0, 1));
+                }
+            }
+
+            field = noisedGrid;
+            return startGame(paused, `${name} (True Random)`);
+        }
+        // case "seed":
+        // {
+        //     return startGame(paused, `${name} (Seeded)`);
+        // }
     }
 }
 
@@ -347,8 +389,6 @@ function calcNextFrame(grid)
  */
 function drawGame(pattern, initial, name, ignorePaused)
 {
-    // TODO: push all to array and then write to console at once so there's no delays when drawing the graphics
-
     let consoleTxt = [];
 
     if((gamePaused && ignorePaused !== true) && initial !== true)
@@ -403,12 +443,12 @@ function drawGame(pattern, initial, name, ignorePaused)
         {
             if(pattern[i] == undefined || pattern[i][j] == undefined)
             {
-                rowConsole += settings.game.deadCellChar;
+                rowConsole += deadCellChar;
                 field[i].push(0);
                 continue;
             }
 
-            rowConsole += (pattern[i][j] == 1 ? settings.game.aliveCellChar : settings.game.deadCellChar);
+            rowConsole += (pattern[i][j] == 1 ? aliveCellChar : deadCellChar);
             field[i].push(pattern[i][j]);
         }
 
@@ -429,7 +469,6 @@ function drawGame(pattern, initial, name, ignorePaused)
     }
     consoleTxt.push(`${btmRowConsole}\n`);
 
-    // TODO: frame doesn't get redrawn when game is paused -> text is not shown properly
     if(!gamePaused)
         consoleTxt.push(`\n[Space] Pause - [◄ ►] Change Speed - [Escape] Menu `);
     else
@@ -440,15 +479,6 @@ function drawGame(pattern, initial, name, ignorePaused)
     process.stdout.write(textToLog);
 
     setTerminalTitle(`${settings.info.name} - ${name}${gamePaused ? " - Paused " : ""}`);
-
-    // pattern.forEach(row => {
-    //     console.log(`${lPad}${settings.game.border.verChar}`);
-    // });
-
-    // console.log(`\nDrawing frame. TTY size: ${size.join("x")} - Field size: ${actualSize.join("x")}`);
-
-    //DEBUG:
-    // process.exit(0);
 }
 
 /**
@@ -470,6 +500,183 @@ function aboutGame()
     jsl.pause().then(() => {
         init();
     });
+}
+
+/**
+ * Displays the settings menu
+ */
+function settingsMenu()
+{
+    let usrSettings = [
+        {
+            objn: "aliveCellChar",
+            name: "Alive Cell",
+            vals: [
+                "∙",
+                "x",
+                "o",
+                "◘",
+                "■",
+                "♦",
+                "☼",
+                "█"
+            ]
+        },
+        {
+            objn: "deadCellChar",
+            name: "Dead Cell",
+            vals: [
+                " ",
+                "_",
+                ".",
+                "'",
+                "∟",
+                "…"
+            ]
+        },
+        // {
+        //     objn: "startPaused",
+        //     name: "Start Paused",
+        //     vals: [
+        //         true,
+        //         false
+        //     ]
+        // }
+    ];
+
+    let settingsToSave = {
+        aliveCellChar: aliveCellChar,
+        deadCellChar: deadCellChar,
+        // startPaused: true
+    }
+    
+    if(fs.existsSync("./preferences.json"))
+        settingsToSave = JSON.parse(fs.readFileSync("./preferences.json").toString());
+
+
+
+    let onCooldown = false;
+    let currentListIdx = 0;
+
+    let kp = (ch, key) => {
+        let curUsrSetting = usrSettings[currentListIdx];
+
+        if(onCooldown || !key)
+            return;
+
+        onCooldown = true;
+        setTimeout(() => {
+            onCooldown = false;
+        }, settings.game.inputCooldown);
+
+        jsl.unused(ch);
+
+        switch(key.name)
+        {
+            case "a":
+            case "left":
+            {
+                let curVals = usrSettings[currentListIdx].vals;
+                let curChar = settingsToSave[curUsrSetting.objn];
+                let curValIdx = curVals.indexOf(curChar);
+
+                if(curValIdx > 0)
+                    settingsToSave[curUsrSetting.objn] = curUsrSetting.vals[curValIdx - 1];
+
+                redisplaySettings();
+
+                break;
+            }
+            case "d":
+            case "right":
+            {
+                let curVals = usrSettings[currentListIdx].vals;
+                let curChar = settingsToSave[curUsrSetting.objn];
+                let curValIdx = curVals.indexOf(curChar);
+
+                if(curValIdx < (usrSettings[currentListIdx].vals.length - 1))
+                    settingsToSave[curUsrSetting.objn] = curUsrSetting.vals[curValIdx + 1];
+
+                redisplaySettings();
+                break;
+            }
+            case "w":
+            case "up":
+                if(currentListIdx > 0)
+                    currentListIdx--;
+
+                redisplaySettings();
+            break;
+            case "s":
+            case "down":
+                if(currentListIdx < (usrSettings.length - 1))
+                    currentListIdx++;
+                
+                redisplaySettings();
+            break;
+            case "c":
+                if(key.ctrl === true)
+                {
+                    clearKP();
+                    process.exit(0);
+                }
+            break;
+            case "return":
+                fs.writeFileSync("./preferences.json", JSON.stringify(settingsToSave, null, 4));
+
+                clearKP();
+                setTimeout(() => init(), settings.game.inputCooldown);
+            break;
+            case "escape":
+                clearKP();
+                setTimeout(() => init(), settings.game.inputCooldown);
+            break;
+            default:
+                // if(dbg) console.log(`Unknown keypress: ${JSON.stringify(key)}`);
+            break;
+        }
+    };
+
+    process.stdin.on("keypress", kp);
+
+    let clearKP = () => {
+        process.stdin.pause();
+        process.stdin.removeAllListeners(["keypress"]);
+    };
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    
+    let redisplaySettings = () => {
+        clearConsole();
+
+        console.log(`Settings:\n`);
+
+        let longestSetting = usrSettings.reduce((prev, cur) => {
+            if(!cur || !prev || !cur.name || !prev.name)
+                return prev;
+
+            if(cur.name.length > prev.name.length)
+                return cur;
+            else
+                return prev;
+        }).name.length;
+
+        usrSettings.forEach((sett, i) => {
+            let paddingLength = (longestSetting - sett.name.length);
+            let padding = "  ";
+
+            for(let j = 0; j < paddingLength; j++)
+                padding += " ";
+
+            let dVal = settingsToSave[sett.objn];
+            console.log(`${currentListIdx == i ? `${jsl.colors.fg.green}>` : " "} ${sett.name}:${padding}[ ${typeof dVal == "boolean" ? (!dVal ? "No" : "Yes") : dVal} ]${jsl.colors.rst}`);
+        });
+
+        process.stdout.write(`\n\n\n[▲ ▼] Navigate - [◄ ►] Change - [Enter] Save & Exit - [Escape] Exit w/o Save `);
+    };
+
+    return redisplaySettings();
 }
 
 //#MARKER events
@@ -519,11 +726,16 @@ function registerControls()
                     redraw(true);
                 }
             break;
+            case "e":
+                if(!gamePaused)
+                    gamePaused = true;
+                // TODO: live editor
+            break;
             case "escape":
                 process.stdin.removeAllListeners(["keypress"]);
                 gameActive = false;
                 gamePaused = true;
-                field = [];
+                field = JSON.parse("[]");
                 init();
             break;
         }
@@ -662,6 +874,95 @@ function presetSelector()
         console.log("\n\n\n");
         jsl.pause().then(() => init());
     }
+}
+
+/**
+ * Displays the random game selector
+ */
+function randomGameSelector()
+{
+    let randomTypes = ["perlin", "random"];
+    let randomNames = ["Perlin Noise", "True Random"];
+
+    let onCooldown = false;
+    let currentListIdx = 0;
+
+    let kp = (ch, key) => {
+        if(onCooldown || !key)
+            return;
+
+        onCooldown = true;
+        setTimeout(() => {
+            onCooldown = false;
+        }, settings.game.inputCooldown);
+
+        jsl.unused(ch);
+
+        switch(key.name)
+        {
+            case "w":
+            case "up":
+                if(currentListIdx > 0)
+                    currentListIdx--;
+
+                redisplayRandomGames();
+            break;
+            case "s":
+            case "down":
+                if(currentListIdx < (randomTypes.length - 1))
+                    currentListIdx++;
+                
+                redisplayRandomGames();
+            break;
+            case "c":
+                if(key.ctrl === true)
+                {
+                    clearKP();
+                    process.exit(0);
+                }
+            break;
+            case "space":
+            case "return":
+                {
+                    console.log("\n");
+                    
+                    clearKP();
+                    setTimeout(() => startRandomGame(true, "Random", randomTypes[currentListIdx], ""), settings.game.inputCooldown);
+                    
+                    break;
+                }
+            case "escape":
+                init();
+            break;
+            default:
+                // if(dbg) console.log(`Unknown keypress: ${JSON.stringify(key)}`);
+            break;
+        }
+    };
+
+    process.stdin.on("keypress", kp);
+
+    let clearKP = () => {
+        process.stdin.pause();
+        process.stdin.removeAllListeners(["keypress"]);
+    };
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    
+    let redisplayRandomGames = () => {
+        clearConsole();
+
+        console.log(`Random Game Generation Mode:\n`);
+
+        randomNames.forEach((rName, i) => {
+            console.log(`${currentListIdx == i ? `${jsl.colors.fg.green}>` : " "} ${rName}${jsl.colors.rst}`);
+        });
+
+        process.stdout.write(`\n\n\n[▲ ▼] Navigate - [Enter] Select - [Escape] Menu `);
+    };
+
+    return redisplayRandomGames();
 }
 
 /**
