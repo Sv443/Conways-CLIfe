@@ -29,7 +29,8 @@ const settings = {
         },
         speedChangeFactor: 0.5,  // by how much the game speed changes when incrementing or decrementing once
         maxSpeed: 10.0,          // maximum game speed
-        inputCooldown: 50        // how many milliseconds to wait between accepted keyboard inputs
+        inputCooldown: 50,       // how many milliseconds to wait between accepted keyboard inputs
+        preferencesFilePath: "./preferences.json"  // where preferences should be saved to (relative to root dir)
     }
 };
 

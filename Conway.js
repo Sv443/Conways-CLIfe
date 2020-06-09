@@ -1,3 +1,13 @@
+/**
+ * Made by Sv443 as part of the CLI games collection: https://github.com/Sv443/CLI-Games-Collection
+ * Licensed under the MIT license
+ * 
+ * I try to keep these games to a single file so view this code at your own risk lol
+ * 
+ * @author Sv443 - https://github.com/Sv443
+ */
+
+
 "use-strict";
 
 const jsl = require("svjsl");
@@ -43,7 +53,7 @@ function preInit()
 
 function beforeShutdown()
 {
-    console.log(`${jsl.colors.fg.yellow}Goodbye.${jsl.colors.rst}`);
+    console.log(`\n${jsl.colors.fg.yellow}Goodbye.${jsl.colors.rst}`);
     process.exit(0);
 }
 
@@ -57,11 +67,11 @@ function init()
     currentIteration = 0;
     field = [];
 
-    if(fs.existsSync("./preferences.json"))
+    if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
     {
         try
         {
-            let usrSettings = JSON.parse(fs.readFileSync("./preferences.json").toString());
+            let usrSettings = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
 
             if(usrSettings)
             {
@@ -95,12 +105,9 @@ function init()
                 break;
                 case 3: // "Random"
                     randomGameSelector();
-                    // startRandomGame(true, "Random", "perlin");
                 break;
                 case 4: // Settings
                     settingsMenu();
-                    // console.log("\nSettings are WIP\n");
-                    // jsl.pause().then(() => init());
                 break;
                 case 5: // "About"
                     aboutGame();
@@ -276,10 +283,6 @@ function startRandomGame(paused, name, type, seed)
             field = noisedGrid;
             return startGame(paused, `${name} (True Random)`);
         }
-        // case "seed":
-        // {
-        //     return startGame(paused, `${name} (Seeded)`);
-        // }
     }
 }
 
@@ -319,7 +322,7 @@ function calcNextFrame(grid)
                 let gridHeight = grid.length;
                 let adjacentCells = [];
 
-                // dynamically pushing across dimensions in an array is fun :) 🔫
+                // dynamically checking values and pushing values across dimensions in two arrays is fun and definitely not complex 🙂🔫
 
                 //#SECTION check adjacent cells
                 if(x - 1 >= 0 && y - 1 >= 0)
@@ -367,9 +370,6 @@ function calcNextFrame(grid)
                 newGrid[x].push(newCell);
             }
         }
-
-        // fs.writeFileSync("./d.json", JSON.stringify(newGrid, null, 4))
-        // process.exit()
 
         let timeDelta = new Date().getTime() - timeS;
         if(dbg) console.log(`calc Δt: ${timeDelta}ms`);
@@ -488,14 +488,21 @@ function aboutGame()
 {
     console.log(`${jsl.colors.fg.blue}About ${settings.info.name}:${jsl.colors.rst}\n`);
 
-    console.log(`Version: ${jsl.colors.fg.yellow}${settings.info.version}${jsl.colors.rst}`);
-    console.log(`Game made by ${jsl.colors.fg.yellow}${settings.info.authorN}${jsl.colors.rst} - ${settings.info.authorGH}`);
-    console.log(`Licensed under the ${jsl.colors.fg.yellow}MIT License${jsl.colors.rst} - https://sv443.net/LICENSE\n`);
-
-    console.log(`GitHub repository: ${settings.info.projGH}`);
-    console.log(`Issue tracker: ${settings.info.issueTracker}`);
-
-    console.log("\n\n\n");
+    console.log(`${jsl.colors.fg.yellow}Nice to know / quirks:${jsl.colors.rst}`);
+    console.log(`- While playing, if the size indicator at the top turns red, your terminal window might be too large.\n  This might cause some graphical issues in some terminals.`);
+    console.log(`- The number next to the "i=" is the current iteration / frame since the game was started.`);
+    console.log(`- If the settings menu seems a bit buggy, please delete the "preferences.json" file and restart the game.`);
+    
+    console.log("\n");
+    
+    console.log(`${jsl.colors.fg.yellow}Other:${jsl.colors.rst}`);
+    console.log(`  Version: ${jsl.colors.fg.yellow}${settings.info.version}${jsl.colors.rst}`);
+    console.log(`  Game made by ${jsl.colors.fg.yellow}${settings.info.authorN}${jsl.colors.rst} - ${settings.info.authorGH}`);
+    console.log(`  Licensed under the ${jsl.colors.fg.yellow}MIT License${jsl.colors.rst} - https://sv443.net/LICENSE`);
+    console.log(`  GitHub repository: ${settings.info.projGH}`);
+    console.log(`  Submit bugs and feature requests: ${settings.info.issueTracker}`);
+    
+    console.log("\n");
 
     jsl.pause().then(() => {
         init();
@@ -528,30 +535,23 @@ function settingsMenu()
             vals: [
                 " ",
                 "_",
+                "-",
                 ".",
                 "'",
                 "∟",
+                "¨",
                 "…"
             ]
-        },
-        // {
-        //     objn: "startPaused",
-        //     name: "Start Paused",
-        //     vals: [
-        //         true,
-        //         false
-        //     ]
-        // }
+        }
     ];
 
     let settingsToSave = {
         aliveCellChar: aliveCellChar,
-        deadCellChar: deadCellChar,
-        // startPaused: true
+        deadCellChar: deadCellChar
     }
     
-    if(fs.existsSync("./preferences.json"))
-        settingsToSave = JSON.parse(fs.readFileSync("./preferences.json").toString());
+    if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
+        settingsToSave = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
 
 
 
@@ -622,7 +622,7 @@ function settingsMenu()
                 }
             break;
             case "return":
-                fs.writeFileSync("./preferences.json", JSON.stringify(settingsToSave, null, 4));
+                fs.writeFileSync(resolve(settings.game.preferencesFilePath), JSON.stringify(settingsToSave, null, 4));
 
                 clearKP();
                 setTimeout(() => init(), settings.game.inputCooldown);

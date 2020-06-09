@@ -5,6 +5,10 @@ Version 0.1.0
 
 
 [CURRENT: 0.1.0] - First Release
-    - [num] presets
+    - 8 presets
+    - Custom preset editor
+    - Random Generation
+        - Perlin Noise
+        - True Random
     - Live editor
-    - Save custom presets made in the editor
+    - Settings menu
