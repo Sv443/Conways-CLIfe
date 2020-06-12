@@ -1,6 +1,6 @@
 # Conways-CLIfe
 Conway's Game of Life in the Command Line Interface.  
-Features a bunch of premade presets and an editor to create your own presets.  
+Features a bunch of premade presets, a random generator and an editor to create your own presets.  
 I strongly recommend using CMD, Git Bash or zsh to run this since it renders better than other terminal apps.  
 
 ### This game is part of my [CLI game collection](https://github.com/Sv443/CLI-Games-Collection)
@@ -17,5 +17,5 @@ I strongly recommend using CMD, Git Bash or zsh to run this since it renders bet
 
 ## Dependencies:
 - keypress
-- noisejs
+- perlin-noise
 - svjsl
