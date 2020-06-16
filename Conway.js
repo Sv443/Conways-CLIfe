@@ -3,8 +3,11 @@
  * Licensed under the MIT license
  * 
  * I try to keep these games to a single file so view this code at your own risk lol
+ * Also x and y coordinates are usually swapped due to me being an idiot (x = rows / down, y = columns / right)
+ * I recommend VS Code with the extension "fabiospampinato.vscode-highlight", it'll give you better code highlighting in here
  * 
  * @author Sv443 - https://github.com/Sv443
+ * @license MIT
  */
 
 
@@ -18,6 +21,7 @@ const settings = require("./settings");
 const fs = require("fs-extra");
 const unzipper = require("unzipper");
 const perlin = require("perlin-noise");
+// const { isBuffer } = require("util");
 require("keypress")(process.stdin);
 
 const dbg = false;
@@ -29,11 +33,16 @@ var gameName = "";
 var currentIteration = 0;
 var aliveCellChar = settings.game.aliveCellChar;
 var deadCellChar = settings.game.deadCellChar;
+var aliveCellColor = settings.game.aliveCellColor;
+var deadCellColor = settings.game.deadCellColor;
+var lastSize = getFieldSize();
 
 
 const defaultSettings = {
     aliveCellChar: aliveCellChar,
-    deadCellChar: deadCellChar
+    deadCellChar: deadCellChar,
+    aliveCellColor: aliveCellColor,
+    deadCellColor: deadCellColor
 };
 
 
@@ -67,8 +76,9 @@ function beforeShutdown()
     process.exit(0);
 }
 
+//#SECTION init
 /**
- * Inits everything
+ * Inits everything and displays the main menu
  */
 function init()
 {
@@ -87,6 +97,8 @@ function init()
             {
                 aliveCellChar = usrSettings.aliveCellChar || settings.game.aliveCellChar;
                 deadCellChar = usrSettings.deadCellChar || settings.game.deadCellChar;
+                aliveCellColor = usrSettings.aliveCellColor || settings.game.aliveCellColor;
+                deadCellColor = usrSettings.deadCellColor || settings.game.deadCellColor;
             }
         }
         catch(err)
@@ -111,7 +123,10 @@ function init()
                 case 2: // "Editor"
                     field = [];
                     // TODO:
-                    startGame(true, "Custom");
+                    console.log("Work in Progress.\n");
+
+                    jsl.pause().then(() => init());
+                    // startGame(true, "Custom");
                 break;
                 case 3: // "Random"
                     randomGameSelector();
@@ -160,15 +175,44 @@ function init()
  * Controls the recalculation of certain things when terminal size was changed.  
  * Can also be called to just redraw the game.
  * @param {Boolean} ignorePaused
+ * @param {Boolean} onlyCheckSizeOk
  */
-function recalcSize(ignorePaused)
+function recalcSize(ignorePaused, onlyCheckSizeOk)
 {
-    // TODO: halt everything if terminal is too small
+    let sizeIsOk = true;
+    let fieldSizeChanged = false;
+
+    let activeFieldArea = getActiveFieldArea(6, 40);
+    let gameFieldSize = getFieldSize();
+
+    if(lastSize[0] != gameFieldSize[0] || lastSize[1] != gameFieldSize[1])
+    {
+        lastSize = gameFieldSize;
+        fieldSizeChanged = true;
+    }
+
+    if(activeFieldArea[0] > gameFieldSize[0] || activeFieldArea[1] > gameFieldSize[1])
+        sizeIsOk = false;
 
     if(dbg) console.log(`Terminal size: ${process.stdout.columns}x${process.stdout.rows} - TTY? ${process.stdout.isTTY}`);
 
     if(gameActive)
-        drawGame(field, false, gameName, ignorePaused);
+    {
+        if(sizeIsOk && onlyCheckSizeOk !== true)
+            drawGame(field, false, gameName, ignorePaused);
+        else if(!sizeIsOk && (fieldSizeChanged || onlyCheckSizeOk === true))
+        {
+            let whatToIncrease = [];
+            activeFieldArea[0] > gameFieldSize[0] && whatToIncrease.push("width");
+            activeFieldArea[1] > gameFieldSize[1] && whatToIncrease.push("height");
+
+            clearConsole();
+            console.log(`${jsl.colors.fg.red}Window too small!${jsl.colors.rst}`);
+            whatToIncrease.length > 0 && console.log(`Increase ${jsl.colors.fg.yellow}${whatToIncrease.join(`${jsl.colors.rst} and ${jsl.colors.fg.yellow}`)}${jsl.colors.rst}.`);
+            console.log("\n(Game paused)");
+            gamePaused = true;
+        }
+    }
 
     if(!process.stdout.isTTY)
     {
@@ -186,17 +230,9 @@ function redraw(ignorePaused)
     recalcSize(ignorePaused);
 }
 
+//#SECTION start game
 /**
- * Returns the size of the terminal in columns and rows
- * @returns {Array<Number>} [width, height]
- */
-function getTerminalSize()
-{
-    return [process.stdout.columns, process.stdout.rows] || [0, 0]; 
-}
-
-/**
- * Starts the actual game with the previously-set instructions
+ * Starts the actual game with the previously set instructions
  * @param {Boolean} paused Whether the game should start paused
  * @param {String} name Name of the session
  * @param {Number} fieldW Width of the field
@@ -213,9 +249,9 @@ function startGame(paused, name, fieldW, fieldH)
 
     process.stdin.removeAllListeners(["keypress"]);
     registerControls();
-
-    gameActive = true;
+    
     gamePaused = paused || true;
+    gameActive = true;
 
     drawGame(field, true, name);
     let calcFrame = () => {
@@ -229,6 +265,12 @@ function startGame(paused, name, fieldW, fieldH)
             setTimeout(() => {
                 field = nextField;
                 drawGame(nextField, false, name);
+
+                if(!gameActive)
+                    return;
+
+                recalcSize(true, true);
+
                 calcFrame();
             }, curFrameTime);
         });
@@ -239,8 +281,9 @@ function startGame(paused, name, fieldW, fieldH)
     dbg && process.stdin.resume();
 }
 
+//#SECTION start random game
 /**
- * 
+ * Starts a new random game
  * @param {Boolean} paused 
  * @param {String} name 
  * @param {"perlin"|"random"} type 
@@ -296,6 +339,7 @@ function startRandomGame(paused, name, type, seed)
     }
 }
 
+//#SECTION calc next frame
 /**
  * Calculates the next frame based on a passed grid and returns it
  * @param {Array<Number>} grid 
@@ -332,7 +376,8 @@ function calcNextFrame(grid)
                 let gridHeight = grid.length;
                 let adjacentCells = [];
 
-                // dynamically checking values and pushing values across dimensions in two arrays is fun and definitely not complex 🙂🔫
+                // dynamically checking values and pushing values across dimensions in
+                // two arrays is fun and definitely not complex and I don't hate myself at all 🙂🔫
 
                 //#SECTION check adjacent cells
                 if(x - 1 >= 0 && y - 1 >= 0)
@@ -446,23 +491,48 @@ function drawGame(pattern, initial, name, ignorePaused)
     let rowConsole = "";
     for(let i = 0; i < actualSize[1]; i++)
     {
+        let rowEmptyFlag = false;
+        let last = null;
         field.push([]);
             rowConsole += `${lPad}${settings.game.border.verChar}`;
+
+        if(pattern[i] == undefined)
+        rowEmptyFlag = true;
         
         for(let j = 0; j < (actualSize[0] - 2); j++)
         {
+            let cellColor = "";
+            if(pattern[i] != undefined && (last == null || last != pattern[i][j]))
+            {
+                last = pattern[i][j];
+
+                if(pattern[i][j] == 1)
+                    cellColor = aliveCellColor;
+                else
+                    cellColor = deadCellColor;
+            }
+
+            if(rowEmptyFlag)
+            {
+                cellColor = deadCellColor;
+                rowEmptyFlag = false;
+            }
+
+            if(i == 5 && j == 61)
+                jsl.unused("breakpoint");
+
             if(pattern[i] == undefined || pattern[i][j] == undefined)
             {
-                rowConsole += deadCellChar;
+                rowConsole += (cellColor + deadCellChar);
                 field[i].push(0);
                 continue;
             }
 
-            rowConsole += (pattern[i][j] == 1 ? aliveCellChar : deadCellChar);
+            rowConsole += (pattern[i][j] == 1 ? (cellColor + aliveCellChar) : (cellColor + deadCellChar));
             field[i].push(pattern[i][j]);
         }
 
-        rowConsole += settings.game.border.verChar + "\n";
+        rowConsole += jsl.colors.rst + settings.game.border.verChar + "\n";
     }
     consoleTxt.push(rowConsole);
 
@@ -491,205 +561,9 @@ function drawGame(pattern, initial, name, ignorePaused)
     setTerminalTitle(`${settings.info.name} - ${name}${gamePaused ? " - Paused " : ""}`);
 }
 
-/**
- * Displays the about section
- */
-function aboutGame()
-{
-    console.log(`${jsl.colors.fg.blue}About ${settings.info.name}:${jsl.colors.rst}\n`);
-
-    console.log(`${jsl.colors.fg.yellow}Nice to know / quirks:${jsl.colors.rst}`);
-    console.log(`- While playing, if the size indicator at the top turns red, your terminal window might be too large.\n  This might cause some graphical issues in some terminals.`);
-    console.log(`- The number next to the "i=" is the current iteration / frame since the game was started.`);
-    console.log(`- If the settings menu seems a bit buggy, please delete the "preferences.json" file and restart the game.`);
-    console.log(`- To update the presets, please delete the "presets" folder. This will start a prompt to re-download them.`);
-    
-    console.log("\n");
-    
-    console.log(`${jsl.colors.fg.yellow}Other:${jsl.colors.rst}`);
-    console.log(`  Version: ${jsl.colors.fg.yellow}${settings.info.version}${jsl.colors.rst}`);
-    console.log(`  Game made by ${jsl.colors.fg.yellow}${settings.info.authorN}${jsl.colors.rst} - ${settings.info.authorGH}`);
-    console.log(`  Licensed under the ${jsl.colors.fg.yellow}MIT License${jsl.colors.rst} - https://sv443.net/LICENSE`);
-    console.log(`  GitHub repository: ${settings.info.projGH}`);
-    console.log(`  Submit bugs and feature requests: ${settings.info.issueTracker}`);
-    
-    console.log("\n");
-
-    jsl.pause().then(() => {
-        init();
-    });
-}
-
-/**
- * Displays the settings menu
- */
-function settingsMenu()
-{
-    let usrSettings = [
-        {
-            objn: "aliveCellChar",
-            name: "Alive Cell",
-            vals: [
-                "∙",
-                "x",
-                "o",
-                "◘",
-                "■",
-                "♦",
-                "☼",
-                "█"
-            ]
-        },
-        {
-            objn: "deadCellChar",
-            name: "Dead Cell",
-            vals: [
-                " ",
-                "_",
-                "-",
-                ".",
-                "'",
-                "∟",
-                "¨",
-                "…"
-            ]
-        }
-    ];
-
-    let settingsToSave = defaultSettings;
-    
-    if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
-        settingsToSave = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
-
-
-
-    let onCooldown = false;
-    let currentListIdx = 0;
-
-    let kp = (ch, key) => {
-        let curUsrSetting = usrSettings[currentListIdx];
-
-        if(onCooldown || !key)
-            return;
-
-        onCooldown = true;
-        setTimeout(() => {
-            onCooldown = false;
-        }, settings.game.inputCooldown);
-
-        jsl.unused(ch);
-
-        switch(key.name)
-        {
-            case "a":
-            case "left":
-            {
-                let curVals = usrSettings[currentListIdx].vals;
-                let curChar = settingsToSave[curUsrSetting.objn];
-                let curValIdx = curVals.indexOf(curChar);
-
-                if(curValIdx > 0)
-                    settingsToSave[curUsrSetting.objn] = curUsrSetting.vals[curValIdx - 1];
-
-                redisplaySettings();
-
-                break;
-            }
-            case "d":
-            case "right":
-            {
-                let curVals = usrSettings[currentListIdx].vals;
-                let curChar = settingsToSave[curUsrSetting.objn];
-                let curValIdx = curVals.indexOf(curChar);
-
-                if(curValIdx < (usrSettings[currentListIdx].vals.length - 1))
-                    settingsToSave[curUsrSetting.objn] = curUsrSetting.vals[curValIdx + 1];
-
-                redisplaySettings();
-                break;
-            }
-            case "w":
-            case "up":
-                if(currentListIdx > 0)
-                    currentListIdx--;
-
-                redisplaySettings();
-            break;
-            case "s":
-            case "down":
-                if(currentListIdx < (usrSettings.length - 1))
-                    currentListIdx++;
-                
-                redisplaySettings();
-            break;
-            case "c":
-                if(key.ctrl === true)
-                {
-                    clearKP();
-                    process.exit(0);
-                }
-            break;
-            case "return":
-                fs.writeFileSync(resolve(settings.game.preferencesFilePath), JSON.stringify(settingsToSave, null, 4));
-
-                clearKP();
-                setTimeout(() => init(), settings.game.inputCooldown);
-            break;
-            case "escape":
-                clearKP();
-                setTimeout(() => init(), settings.game.inputCooldown);
-            break;
-            default:
-                // if(dbg) console.log(`Unknown keypress: ${JSON.stringify(key)}`);
-            break;
-        }
-    };
-
-    process.stdin.on("keypress", kp);
-
-    let clearKP = () => {
-        process.stdin.pause();
-        process.stdin.removeAllListeners(["keypress"]);
-    };
-
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
-    
-    let redisplaySettings = () => {
-        clearConsole();
-
-        console.log(`Settings:\n`);
-
-        let longestSetting = usrSettings.reduce((prev, cur) => {
-            if(!cur || !prev || !cur.name || !prev.name)
-                return prev;
-
-            if(cur.name.length > prev.name.length)
-                return cur;
-            else
-                return prev;
-        }).name.length;
-
-        usrSettings.forEach((sett, i) => {
-            let paddingLength = (longestSetting - sett.name.length);
-            let padding = "  ";
-
-            for(let j = 0; j < paddingLength; j++)
-                padding += " ";
-
-            let dVal = settingsToSave[sett.objn];
-            console.log(`${currentListIdx == i ? `${jsl.colors.fg.green}>` : " "} ${sett.name}:${padding}[ ${typeof dVal == "boolean" ? (!dVal ? "No" : "Yes") : dVal} ]${jsl.colors.rst}`);
-        });
-
-        process.stdout.write(`\n\n\n[▲ ▼] Navigate - [◄ ►] Change - [Enter] Save & Exit - [Escape] Exit w/o Save `);
-    };
-
-    return redisplaySettings();
-}
-
 //#MARKER events
 /**
- * Registers the async listeners for input during gameplay
+ * Registers the async listeners for input during "gameplay"
  */
 function registerControls()
 {
@@ -848,7 +722,9 @@ function presetSelector()
         let redisplayPresets = () => {
             clearConsole();
 
-            console.log(`${presets.length} presets found:\n`);
+            let textToLog = [];
+
+            textToLog.push(`${jsl.colors.fg.blue}Presets (${presets.length}):${jsl.colors.rst}\n\n`);
 
             presets.forEach((preset, i) => {
                 // console.log(`${jsl.colors.fg.yellow}DBG - clidx: ${currentListIdx} - i: ${i}${jsl.colors.rst}`);
@@ -856,24 +732,25 @@ function presetSelector()
                 try
                 {
                     if(i == currentListIdx)
-                        process.stdout.write(jsl.colors.fg.green + "> ");
+                        textToLog.push(jsl.colors.fg.green + "> ");
                     else
-                        process.stdout.write("  ");
+                        textToLog.push("  ");
 
                     let presetData = JSON.parse(fs.readFileSync(join(presetsDir, preset)).toString());
 
-                    process.stdout.write(`${presetData.name} [${presetData.size[0]}x${presetData.size[1]}]${jsl.colors.rst}`);
-                    process.stdout.write("\n");
+                    textToLog.push(`${presetData.name} [${presetData.size[0]}x${presetData.size[1]}]${jsl.colors.rst}\n`);
                 }
                 catch(err)
                 {
                     jsl.unused(err);
 
-                    console.log(`${preset} ${jsl.colors.fg.red}[CORRUPTED]${jsl.colors.rst}`);
+                    textToLog.push(`${preset} ${jsl.colors.fg.red}[CORRUPTED]${jsl.colors.rst}`);
                 }
             });
 
-            process.stdout.write(`\n\n\n[▲ ▼] Navigate - [Enter] Select - [Escape] Menu `);
+            textToLog.push(`\n\n[▲ ▼] Navigate - [Enter] Select - [Escape] Menu `);
+
+            process.stdout.write(textToLog.join(""));
         };
 
         return redisplayPresets();
@@ -968,6 +845,7 @@ function presetSelector()
     }
 }
 
+//#SECTION random game
 /**
  * Displays the random game selector
  */
@@ -1051,10 +929,250 @@ function randomGameSelector()
             console.log(`${currentListIdx == i ? `${jsl.colors.fg.green}>` : " "} ${rName}${jsl.colors.rst}`);
         });
 
-        process.stdout.write(`\n\n\n[▲ ▼] Navigate - [Enter] Select - [Escape] Menu `);
+        process.stdout.write(`\n\n[▲ ▼] Navigate - [Enter] Select - [Escape] Menu `);
     };
 
     return redisplayRandomGames();
+}
+
+//#SECTION settings
+/**
+ * Displays the settings menu
+ */
+function settingsMenu()
+{
+    let c = jsl.colors.fg;
+    let usrSettings = [
+        {
+            objn: "aliveCellChar",
+            name: "Alive Cell",
+            vals: [
+                "∙",
+                "x",
+                "o",
+                "◘",
+                "■",
+                "█",
+                "♦",
+                "☼"
+            ]
+        },
+        {
+            objn: "deadCellChar",
+            name: "Dead Cell",
+            vals: [
+                " ",
+                "_",
+                "-",
+                ".",
+                "'",
+                "∟",
+                "¨",
+                "…",
+                "◘",
+                "■",
+                "█",
+                "♦",
+                "☼"
+            ]
+        },
+        {
+            objn: "aliveCellColor",
+            name: "Alive Cell Color",
+            suffix: `█${jsl.colors.rst}`,
+            vals: [
+                jsl.colors.rst,
+                c.red,
+                c.blue,
+                c.green,
+                c.yellow,
+                c.cyan,
+                c.magenta,
+                c.white,
+                c.black
+            ]
+        },
+        {
+            objn: "deadCellColor",
+            name: "Dead Cell Color",
+            suffix: `█${jsl.colors.rst}`,
+            vals: [
+                jsl.colors.rst,
+                c.red,
+                c.blue,
+                c.green,
+                c.yellow,
+                c.cyan,
+                c.magenta,
+                c.white,
+                c.black
+            ]
+        }
+    ];
+
+    let settingsToSave = defaultSettings;
+    
+    if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
+        settingsToSave = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
+
+
+
+    let onCooldown = false;
+    let currentListIdx = 0;
+
+    let kp = (ch, key) => {
+        let curUsrSetting = usrSettings[currentListIdx];
+
+        if(onCooldown || !key)
+            return;
+
+        onCooldown = true;
+        setTimeout(() => {
+            onCooldown = false;
+        }, settings.game.inputCooldown);
+
+        jsl.unused(ch);
+
+        switch(key.name)
+        {
+            case "a":
+            case "left":
+            {
+                let curVals = usrSettings[currentListIdx].vals;
+                let curChar = settingsToSave[curUsrSetting.objn];
+                let curValIdx = curVals.indexOf(curChar);
+
+                if(curValIdx > 0)
+                    settingsToSave[curUsrSetting.objn] = curUsrSetting.vals[curValIdx - 1];
+
+                redisplaySettings();
+
+                break;
+            }
+            case "d":
+            case "right":
+            {
+                let curVals = usrSettings[currentListIdx].vals;
+                let curChar = settingsToSave[curUsrSetting.objn];
+                let curValIdx = curVals.indexOf(curChar);
+
+                if(curValIdx < (usrSettings[currentListIdx].vals.length - 1))
+                    settingsToSave[curUsrSetting.objn] = curUsrSetting.vals[curValIdx + 1];
+
+                redisplaySettings();
+                break;
+            }
+            case "w":
+            case "up":
+                if(currentListIdx > 0)
+                    currentListIdx--;
+
+                redisplaySettings();
+            break;
+            case "s":
+            case "down":
+                if(currentListIdx < (usrSettings.length - 1))
+                    currentListIdx++;
+                
+                redisplaySettings();
+            break;
+            case "c":
+                if(key.ctrl === true)
+                {
+                    clearKP();
+                    process.exit(0);
+                }
+            break;
+            case "return":
+                fs.writeFileSync(resolve(settings.game.preferencesFilePath), JSON.stringify(settingsToSave, null, 4));
+
+                clearKP();
+                setTimeout(() => init(), settings.game.inputCooldown);
+            break;
+            case "escape":
+                clearKP();
+                setTimeout(() => init(), settings.game.inputCooldown);
+            break;
+            default:
+                // if(dbg) console.log(`Unknown keypress: ${JSON.stringify(key)}`);
+            break;
+        }
+    };
+
+    process.stdin.on("keypress", kp);
+
+    let clearKP = () => {
+        process.stdin.pause();
+        process.stdin.removeAllListeners(["keypress"]);
+    };
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    
+    let redisplaySettings = () => {
+        clearConsole();
+
+        console.log(`${jsl.colors.fg.blue}Settings:${jsl.colors.rst}\n`);
+
+        let longestSetting = usrSettings.reduce((prev, cur) => {
+            if(!cur || !prev || !cur.name || !prev.name)
+                return prev;
+
+            if(cur.name.length > prev.name.length)
+                return cur;
+            else
+                return prev;
+        }).name.length;
+
+        usrSettings.forEach((sett, i) => {
+            let paddingLength = (longestSetting - sett.name.length);
+            let padding = "  ";
+
+            for(let j = 0; j < paddingLength; j++)
+                padding += " ";
+
+            let dVal = settingsToSave[sett.objn];
+
+            if(typeof sett.suffix == "string")
+                dVal += sett.suffix;
+
+            console.log(`${currentListIdx == i ? `${jsl.colors.fg.green}>` : " "} ${sett.name}:${padding}[ ${typeof dVal == "boolean" ? (!dVal ? "No" : "Yes") : dVal} ${currentListIdx == i ? jsl.colors.fg.green : ""}]${jsl.colors.rst}`);
+        });
+
+        process.stdout.write(`\n\n[▲ ▼] Navigate - [◄ ►] Change - [Enter] Save & Exit - [Escape] Exit w/o Save `);
+    };
+
+    return redisplaySettings();
+}
+
+//#SECTION about
+/**
+ * Displays the about section
+ */
+function aboutGame()
+{
+    console.log(`${jsl.colors.fg.blue}About ${settings.info.name}:${jsl.colors.rst}\n`);
+
+    console.log(`${jsl.colors.fg.yellow}Nice to know / quirks:${jsl.colors.rst}`);
+    console.log(`- While playing, if the size indicator at the top turns red, your terminal window might be too large.\n  This might cause some graphical issues in some terminals.`);
+    console.log(`- The number next to the "i=" is the current iteration / frame since the game was started.`);
+    console.log(`- If the settings menu seems a bit buggy, please delete the "preferences.json" file and restart the game.`);
+    console.log(`- To update the presets, please delete the "presets" folder. This will start a prompt to re-download them.`);
+    
+    console.log("\n");
+    
+    console.log(`${jsl.colors.fg.yellow}Other:${jsl.colors.rst}`);
+    console.log(`  Version: ${jsl.colors.fg.yellow}${settings.info.version}${jsl.colors.rst}`);
+    console.log(`  Game made by ${jsl.colors.fg.yellow}${settings.info.authorN}${jsl.colors.rst} - ${settings.info.authorGH}`);
+    console.log(`  Licensed under the ${jsl.colors.fg.yellow}MIT License${jsl.colors.rst} - https://sv443.net/LICENSE`);
+    console.log(`  GitHub repository: ${settings.info.projGH}`);
+    console.log(`  Submit bugs and feature requests: ${settings.info.issueTracker}`);
+    
+    console.log("\n");
+
+    jsl.pause().then(() => {
+        init();
+    });
 }
 
 /**
@@ -1093,6 +1211,7 @@ function clearConsole()
     }
 }
 
+//#SECTION terminal-related shit
 /**
  * Sets the title of the terminal window
  * @param {String} title
@@ -1115,7 +1234,63 @@ function getFieldSize()
     let horPadding = settings.game.padding.horizontal;
     let verPadding = settings.game.padding.vertical;
 
-    return [(w - horPadding.reduce((acc, val) => acc += val)), (h - verPadding.reduce((acc, val) => acc += val))];
+    let wh = [(w - horPadding.reduce((acc, val) => (acc += val))), (h - verPadding.reduce((acc, val) => (acc += val)))];
+    return wh;
 }
 
+/**
+ * Returns the size of the game field where cells are alive in, plus an optional padding to the right and down
+ * @param {Number} [paddingX] Gets applied downwards
+ * @param {Number} [paddingY] Gets applied to the right
+ * @returns {Array<Number>} [width, height] / [y, x]
+ */
+function getActiveFieldArea(paddingX, paddingY)
+{
+    let width = 0;
+    let height = 0;
+    let isFilled = false;
+
+    field.forEach((row, x) => {
+        row.forEach((col, y) => {
+            if(col == 1 && y + 1 > width)
+            {
+                isFilled = true;
+                width = y + 1;
+            }
+        });
+
+        if(row.includes(1) && x + 1 > height)
+        {
+            isFilled = true;
+            height = x + 1;
+        }
+    });
+
+    if(!isFilled)
+        return [ 0, 0 ];
+
+    paddingX = parseInt(paddingX);
+    paddingY = parseInt(paddingY);
+
+    if(!isNaN(paddingX))
+        height += paddingX;
+
+    if(!isNaN(paddingY))
+        width += paddingY;
+
+    return [ width, height ];
+}
+
+/**
+ * Returns the size of the terminal in columns and rows
+ * @returns {Array<Number>} [width, height]
+ */
+function getTerminalSize()
+{
+    return [process.stdout.columns, process.stdout.rows] || [0, 0]; 
+}
+
+
+
+//#SECTION execute everything
 preInit();
