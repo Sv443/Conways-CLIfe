@@ -2,9 +2,11 @@
   "name": "conwayclife",
   "version": "0.1.0",
   "description": "Conway's Game of Life in the Command Line Interface",
+  "bin": "Conway.js",
   "main": "Conway.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "pkg . --out-path \"./dist\""
   },
   "repository": {
     "type": "git",
@@ -29,9 +31,11 @@
   },
   "homepage": "https://github.com/Sv443/Conways-CLIfe#readme",
   "dependencies": {
+    "fs-extra": "^9.0.1",
     "keypress": "^0.2.1",
     "perlin-noise": "0.0.1",
-    "svjsl": "^1.9.4"
+    "svjsl": "^1.9.4",
+    "unzipper": "^0.10.11"
   },
   "devDependencies": {
     "eslint": "^7.1.0"

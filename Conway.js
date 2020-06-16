@@ -11,11 +11,12 @@
 "use-strict";
 
 const jsl = require("svjsl");
-const fs = require("fs");
 const { resolve, join } = require("path");
 
 const settings = require("./settings");
 
+const fs = require("fs-extra");
+const unzipper = require("unzipper");
 const perlin = require("perlin-noise");
 require("keypress")(process.stdin);
 
@@ -30,6 +31,11 @@ var aliveCellChar = settings.game.aliveCellChar;
 var deadCellChar = settings.game.deadCellChar;
 
 
+const defaultSettings = {
+    aliveCellChar: aliveCellChar,
+    deadCellChar: deadCellChar
+};
+
 
 //#MARKER init
 
@@ -40,6 +46,10 @@ function preInit()
 {
     process.on("SIGINT", beforeShutdown);
     process.on("SIGTERM", beforeShutdown);
+
+    let prefPath = resolve(settings.game.preferencesFilePath);
+    if(!fs.existsSync(prefPath))
+        fs.writeFileSync(prefPath, JSON.stringify(defaultSettings, null, 4));
 
     process.stdin.setRawMode(true);
 
@@ -492,6 +502,7 @@ function aboutGame()
     console.log(`- While playing, if the size indicator at the top turns red, your terminal window might be too large.\n  This might cause some graphical issues in some terminals.`);
     console.log(`- The number next to the "i=" is the current iteration / frame since the game was started.`);
     console.log(`- If the settings menu seems a bit buggy, please delete the "preferences.json" file and restart the game.`);
+    console.log(`- To update the presets, please delete the "presets" folder. This will start a prompt to re-download them.`);
     
     console.log("\n");
     
@@ -545,10 +556,7 @@ function settingsMenu()
         }
     ];
 
-    let settingsToSave = {
-        aliveCellChar: aliveCellChar,
-        deadCellChar: deadCellChar
-    }
+    let settingsToSave = defaultSettings;
     
     if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
         settingsToSave = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
@@ -758,9 +766,12 @@ jsl.unused(removeControlEvents);
  */
 function presetSelector()
 {
-    let presetsDir = resolve(`./${settings.game.presetsDirName}`);
-    let presets = fs.readdirSync(presetsDir);
+    let presetsDir = resolve(`./${settings.game.presetsDirName}/`);
 
+    if(!fs.existsSync(presetsDir))
+        fs.mkdirSync(resolve(presetsDir));
+    
+    let presets = fs.readdirSync(presetsDir);
     let currentListIdx = 0;
     let onCooldown = false;
 
@@ -869,10 +880,91 @@ function presetSelector()
     }
     else
     {
-        console.log(`No presets found :(\n\nBut fear not! You can download them here:\n${getCurrentPresetsURL()}`);
+        console.log(`${jsl.colors.fg.yellow}No presets were found.${jsl.colors.rst}\n`);
 
-        console.log("\n\n\n");
-        jsl.pause().then(() => init());
+        jsl.pause(`Do you want to download them now? (Y/n): `).then(ans => {
+            if(ans.toLowerCase() == "n")
+                return init();
+
+            let zFile = "./repo.zip";
+
+            //#SECTION download
+            process.stdout.write("Downloading (0%)...");
+            jsl.downloadFile(settings.game.repoDownload, "./", {
+                fileName: zFile,
+                progressCallback: prog => {
+                    try
+                    {
+                        let perc = 0;
+                        if(prog.totalKB)
+                            perc = jsl.mapRange(prog.currentKB, 0, prog.totalKB, 0, 100);
+
+                        process.stdout.cursorTo(0);
+                        process.stdout.write(`Downloading (${perc.toFixed(0)}%)...`);
+                    }
+                    catch(err)
+                    {
+                        jsl.unused(err);
+                    }
+                },
+                finishedCallback: err => {
+                    process.stdout.cursorTo(0);
+                    process.stdout.write(`Downloading (100%)...\n`);
+                    if(err)
+                    {
+                        console.log(`${jsl.colors.fg.red}Error while downloading: ${err}\nMake sure your internet connection is working!${jsl.colors.rst}`);
+                        jsl.pause().then(() => init());
+                    }
+                    else
+                    {
+                        if(!fs.existsSync(zFile))
+                        {
+                            console.log(`${jsl.colors.fg.red}Unknown error while downloading.\nMake sure your internet connection is working and the game has write permissions!${jsl.colors.rst}`);
+                            jsl.pause().then(() => init());
+                        }
+                        else
+                        {
+                            //#SECTION unzip
+                            console.log("Unzipping...");
+
+                            if(!fs.existsSync("./repoUnzip"))
+                                fs.mkdirSync("./repoUnzip");
+
+                            fs.createReadStream(zFile)
+                                .pipe(unzipper.Extract({ path: "./repoUnzip" }))
+                                .on("close", () => {
+                                    //#SECTION extract
+                                    let presetsSubdir = resolve("./repoUnzip/Conways-CLIfe-master/presets");
+
+                                    console.log("Extracting presets...");
+
+                                    if(fs.existsSync(presetsDir))
+                                        fs.removeSync(presetsDir);
+
+                                    fs.copySync(presetsSubdir, presetsDir, {
+                                        errorOnExist: false,
+                                        overwrite: true
+                                    });
+
+                                    //#SECTION cleanup
+                                    console.log("Cleaning up...");
+                                    fs.unlinkSync(zFile);
+                                    fs.removeSync(resolve("./repoUnzip"));
+
+                                    let presetsDlAmount = fs.readdirSync(presetsDir).length;
+
+                                    console.log(`\n${jsl.colors.fg.green}Successfully downloaded and extracted ${presetsDlAmount} presets.${jsl.colors.rst}\n\n`);
+
+                                    jsl.pause().then(() => init());
+                                })
+                                .on("error", (err) => {
+                                    console.log(`${jsl.colors.fg.red}Error while unzipping: ${err}${jsl.colors.rst}`);
+                                });
+                        }
+                    }
+                }
+            });
+        });
     }
 }
 
@@ -975,14 +1067,6 @@ function loadPreset(name, size, pattern)
 {
     field = pattern;
     startGame(true, `Preset: ${name}`, size[0], size[1]);
-}
-
-/**
- * Returns the current presets URL
- */
-function getCurrentPresetsURL()
-{
-    return "[[Not implemented yet]]";
 }
 
 //#MARKER misc
