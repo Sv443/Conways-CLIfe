@@ -72,87 +72,89 @@ function beforeShutdown()
  */
 function init()
 {
-    setTerminalTitle(`${settings.info.name} - Menu`);
+    setTimeout(() => {
+        setTerminalTitle(`${settings.info.name} - Menu`);
 
-    currentIteration = 0;
-    field = [];
+        currentIteration = 0;
+        field = [];
 
-    if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
-    {
-        try
+        if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
         {
-            let usrSettings = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
-
-            if(usrSettings)
+            try
             {
-                aliveCellChar = usrSettings.aliveCellChar || settings.game.aliveCellChar;
-                deadCellChar = usrSettings.deadCellChar || settings.game.deadCellChar;
+                let usrSettings = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
+
+                if(usrSettings)
+                {
+                    aliveCellChar = usrSettings.aliveCellChar || settings.game.aliveCellChar;
+                    deadCellChar = usrSettings.deadCellChar || settings.game.deadCellChar;
+                }
+            }
+            catch(err)
+            {
+                jsl.unused(err);
             }
         }
-        catch(err)
-        {
-            jsl.unused(err);
-        }
-    }
 
-    let mp = new jsl.MenuPrompt({
-        autoSubmit: true,
-        exitKey: "x",
-        retryOnInvalid: true,
-        onFinished: (res => {
-            if(res[0] == undefined)
-                process.exit(0);
+        let mp = new jsl.MenuPrompt({
+            autoSubmit: true,
+            exitKey: "x",
+            retryOnInvalid: true,
+            onFinished: (res => {
+                if(res[0] == undefined)
+                    process.exit(0);
 
-            switch(parseInt(res[0].key))
-            {
-                case 1: // "Presets"
-                    presetSelector();
-                break;
-                case 2: // "Editor"
-                    field = [];
-                    // TODO:
-                    startGame(true, "Custom");
-                break;
-                case 3: // "Random"
-                    randomGameSelector();
-                break;
-                case 4: // Settings
-                    settingsMenu();
-                break;
-                case 5: // "About"
-                    aboutGame();
-                break;
-            }
-        })
-    });
+                switch(parseInt(res[0].key))
+                {
+                    case 1: // "Presets"
+                        presetSelector();
+                    break;
+                    case 2: // "Editor"
+                        field = [];
+                        // TODO:
+                        startGame(true, "Custom");
+                    break;
+                    case 3: // "Random"
+                        randomGameSelector();
+                    break;
+                    case 4: // Settings
+                        settingsMenu();
+                    break;
+                    case 5: // "About"
+                        aboutGame();
+                    break;
+                }
+            })
+        });
 
-    mp.addMenu({
-        title: `${settings.info.name} v${settings.info.version}`,
-        options: [
-            {
-                key: "1",
-                description: "Presets"
-            },
-            {
-                key: "2",
-                description: "Custom [WIP]"
-            },
-            {
-                key: "3",
-                description: "Random\n"
-            },
-            {
-                key: "4",
-                description: "Settings"
-            },
-            {
-                key: "5",
-                description: "About"
-            }
-        ]
-    });
+        mp.addMenu({
+            title: `${settings.info.name} v${settings.info.version}`,
+            options: [
+                {
+                    key: "1",
+                    description: "Presets"
+                },
+                {
+                    key: "2",
+                    description: "Custom [WIP]"
+                },
+                {
+                    key: "3",
+                    description: "Random\n"
+                },
+                {
+                    key: "4",
+                    description: "Settings"
+                },
+                {
+                    key: "5",
+                    description: "About"
+                }
+            ]
+        });
 
-    mp.open();
+        return mp.open();
+    }, settings.game.inputCooldown);
 }
 
 //#MARKER game

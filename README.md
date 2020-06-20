@@ -6,7 +6,7 @@
 [![Known Vulnerabilities](https://snyk.io/test/github/Sv443/Conways-CLIfe/badge.svg)](https://snyk.io/test/github/Sv443/Conways-CLIfe)
 [![Discord](https://img.shields.io/discord/565933531214118942)](https://sv443.net/discord)  
 
-![preview](./clife_preview.gif)
+[![preview](./clife_preview.gif)](#readme)
 
 </div>
 
@@ -24,7 +24,7 @@ I strongly recommend using CMD, Git Bash or zsh to run this since it renders bet
 1. Have Node.js and npm installed (I recommend the latest v14)
 2. Download or clone the repo and open a terminal in the downloaded folder
 3. Install dependencies by running the command `npm i` in the terminal
-4. Run the command `npm run build` to build the executables (they're located in the `dist` folder)
+4. Run the command `npm run build` to build the executables (they will be located in the `dist` folder)
 
 <br>
 
