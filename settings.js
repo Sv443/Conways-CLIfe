@@ -1,4 +1,5 @@
 const packageJson = require("./package.json");
+const c = require("svjsl").colors;
 
 const settings = {
     info: {
@@ -11,11 +12,13 @@ const settings = {
         issueTracker:  "https://github.com/Sv443/Conways-CLIfe/issues/new/choose"
     },
     game: {
-        presetsDirName:    "presets",  // name of the presets directory
-        defaultFrameTime:  500,        // default time each frame / iteration stays rendered
-        aliveCellChar:     "∙",        // default character of an alive cell
-        deadCellChar:      " ",        // default character of a dead cell
-        border: {                      // characters that make up the border:
+        presetsDirName:   "presets",  // name of the presets directory
+        defaultFrameTime: 500,        // default time each frame / iteration stays rendered
+        aliveCellChar:    "∙",        // default character of an alive cell
+        deadCellChar:     " ",        // default character of a dead cell
+        aliveCellColor:   c.rst,      // default color of an alive cell
+        deadCellColor:    c.rst,      // default color of a dead cell
+        border: {                     // characters that make up the border:
             horChar:   "─",
             verChar:   "│",
             cornerTL:  "┌",
