@@ -90,22 +90,23 @@ function init()
 
         if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
         {
+            let usrSettings = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
             try
             {
-                let usrSettings = JSON.parse(fs.readFileSync(resolve(settings.game.preferencesFilePath)).toString());
-
                 if(usrSettings)
                 {
                     aliveCellChar = usrSettings.aliveCellChar || settings.game.aliveCellChar;
                     deadCellChar = usrSettings.deadCellChar || settings.game.deadCellChar;
+                    aliveCellColor = usrSettings.aliveCellColor || settings.game.aliveCellColor;
+                    deadCellColor = usrSettings.deadCellColor || settings.game.deadCellColor;
                 }
             }
             catch(err)
             {
-                aliveCellChar = usrSettings.aliveCellChar || settings.game.aliveCellChar;
-                deadCellChar = usrSettings.deadCellChar || settings.game.deadCellChar;
-                aliveCellColor = usrSettings.aliveCellColor || settings.game.aliveCellColor;
-                deadCellColor = usrSettings.deadCellColor || settings.game.deadCellColor;
+                aliveCellChar = settings.game.aliveCellChar;
+                deadCellChar = settings.game.deadCellChar;
+                aliveCellColor = settings.game.aliveCellColor;
+                deadCellColor = settings.game.deadCellColor;
             }
         }
 
