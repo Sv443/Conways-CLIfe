@@ -38,12 +38,12 @@ var deadCellColor = settings.game.deadCellColor;
 var lastSize = getFieldSize();
 
 
-const defaultSettings = {
+const defaultSettings = Object.freeze({
     aliveCellChar: aliveCellChar,
     deadCellChar: deadCellChar,
     aliveCellColor: aliveCellColor,
     deadCellColor: deadCellColor
-};
+});
 
 
 //#MARKER init
