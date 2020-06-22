@@ -1,7 +1,11 @@
--------------------------------
+===============================
 Conway's Game of CLIfe by Sv443
-Version 0.1.0
--------------------------------
+       - Version 0.1.0 -       
+===============================
+
+
+[PLANNED]
+    - Enforce Minimum Size
 
 
 [CURRENT: 0.1.0] - First Release

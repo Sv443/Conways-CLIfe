@@ -197,7 +197,7 @@ function recalcSize(ignorePaused, onlyCheckSizeOk)
 
     if(dbg) console.log(`Terminal size: ${process.stdout.columns}x${process.stdout.rows} - TTY? ${process.stdout.isTTY}`);
 
-    if(gameActive)
+    if(gameActive && settings.game.enforceSize)
     {
         if(sizeIsOk && onlyCheckSizeOk !== true)
             drawGame(field, false, gameName, ignorePaused);
@@ -1155,7 +1155,8 @@ function aboutGame()
     console.log(`${jsl.colors.fg.blue}About ${settings.info.name}:${jsl.colors.rst}\n`);
 
     console.log(`${jsl.colors.fg.yellow}Nice to know / quirks:${jsl.colors.rst}`);
-    console.log(`- While playing, if the size indicator at the top turns red, your terminal window might be too large.\n  This might cause some graphical issues in some terminals.`);
+    console.log("- This game works best in CMD, Git Bash and zsh. Other terminals might cause graphical issues or glitches.");
+    console.log(`- While playing, if the size indicator at the top turns red, your terminal window might be too large.\n  This might also cause some graphical issues in some terminals.`);
     console.log(`- The number next to the "i=" is the current iteration / frame since the game was started.`);
     console.log(`- If the settings menu seems a bit buggy, please delete the "preferences.json" file and restart the game.`);
     console.log(`- To update the presets, please delete the "presets" folder. This will start a prompt to re-download them.`);

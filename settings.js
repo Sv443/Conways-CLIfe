@@ -34,7 +34,8 @@ const settings = {
         maxSpeed: 10.0,          // maximum game speed
         inputCooldown: 50,       // how many milliseconds to wait between accepted keyboard inputs
         preferencesFilePath: "./preferences.json", // where preferences should be saved to (relative to root dir),
-        repoDownload: "https://github.com/Sv443/Conways-CLIfe/archive/master.zip"
+        repoDownload: "https://github.com/Sv443/Conways-CLIfe/archive/master.zip",
+        enforceSize: false        // enforces that the field is accurately sized
     }
 };
 
