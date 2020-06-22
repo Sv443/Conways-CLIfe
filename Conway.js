@@ -35,7 +35,9 @@ var aliveCellChar = settings.game.aliveCellChar;
 var deadCellChar = settings.game.deadCellChar;
 var aliveCellColor = settings.game.aliveCellColor;
 var deadCellColor = settings.game.deadCellColor;
+var cursorColor = jsl.colors.bg.blue;
 var lastSize = getFieldSize();
+var editorCursorPos = [ 0, 0 ];
 
 
 const defaultSettings = Object.freeze({
@@ -87,6 +89,7 @@ function init()
 
         currentIteration = 0;
         field = [];
+        editorCursorPos = [ 0, 0 ];
 
         if(fs.existsSync(resolve(settings.game.preferencesFilePath)))
         {
@@ -197,15 +200,15 @@ function recalcSize(ignorePaused, onlyCheckSizeOk)
 
     if(dbg) console.log(`Terminal size: ${process.stdout.columns}x${process.stdout.rows} - TTY? ${process.stdout.isTTY}`);
 
-    if(gameActive && settings.game.enforceSize)
+    if(settings.game.enforceSize && gameActive)
     {
         if(sizeIsOk && onlyCheckSizeOk !== true)
             drawGame(field, false, gameName, ignorePaused);
         else if(!sizeIsOk && (fieldSizeChanged || onlyCheckSizeOk === true))
         {
             let whatToIncrease = [];
-            activeFieldArea[0] > gameFieldSize[0] && whatToIncrease.push("width");
-            activeFieldArea[1] > gameFieldSize[1] && whatToIncrease.push("height");
+            (activeFieldArea[0] > gameFieldSize[0]) && whatToIncrease.push("width");
+            (activeFieldArea[1] > gameFieldSize[1]) && whatToIncrease.push("height");
 
             clearConsole();
             console.log(`${jsl.colors.fg.red}Window too small!${jsl.colors.rst}`);
@@ -245,8 +248,6 @@ function startGame(paused, name, fieldW, fieldH)
 
     gameName = name;
     currentIteration = 0;
-
-    // console.log(JSON.stringify(field, null, 4));
 
     process.stdin.removeAllListeners(["keypress"]);
     registerControls();
@@ -450,6 +451,32 @@ function drawGame(pattern, initial, name, ignorePaused)
     if((gamePaused && ignorePaused !== true) && initial !== true)
         return;
 
+    consoleTxt = drawActualField(name, pattern, true, false);
+
+    if(!gamePaused)
+        consoleTxt.push(`\n[Space] Pause - [◄ ►] Change Speed - [E] Editor - [Escape] Menu `);
+    else
+        consoleTxt.push(`\n[Space] Play - [◄ ►] Change Speed - [E] Editor - [Escape] Menu `);
+
+    let textToLog = consoleTxt.reduce((acc, val) => acc + val);
+
+    process.stdout.write(textToLog);
+
+    setTerminalTitle(`${settings.info.name} - ${name}${gamePaused ? " - Paused " : ""}`);
+}
+
+/**
+ * Draws the actual field (without footer) and returns rows to draw
+ * @param {String} name
+ * @param {Array<Number>} pattern
+ * @param {Boolean} [extraHeaderData]
+ * @param {Boolean} [markCursor]
+ * @returns {Array<String>}
+ */
+function drawActualField(name, pattern, extraHeaderData, markCursor)
+{
+    let consoleTxt = [];
+
     let actualSize = getFieldSize();
     let horPadding = settings.game.padding.horizontal;
     let verPadding = settings.game.padding.vertical;
@@ -460,8 +487,12 @@ function drawGame(pattern, initial, name, ignorePaused)
     if(actualSize[0] + actualSize[1] >= 200)
         sizeCol = jsl.colors.fg.red;
 
+    let headerExtraTxt = "";
+    if(extraHeaderData === true)
+        headerExtraTxt = `${sizeCol}[${actualSize[0]}x${actualSize[1]}]${jsl.colors.fg.yellow} ${gameSpeed == 1.0 ? "1" : gameSpeed.toFixed(1)}x ${jsl.colors.rst}-${jsl.colors.fg.yellow} i=${currentIteration} ${gamePaused ? `${jsl.colors.rst}-${jsl.colors.fg.yellow} Paused ` : ""}`;
+
     if(name && typeof name == "string" && name.length > 0)
-        consoleTxt.push(`${jsl.colors.fg.cyan}${name} ${sizeCol}[${actualSize[0]}x${actualSize[1]}]${jsl.colors.fg.yellow} ${gameSpeed == 1.0 ? "1" : gameSpeed.toFixed(1)}x ${jsl.colors.rst}-${jsl.colors.fg.yellow} i=${currentIteration} ${gamePaused ? `${jsl.colors.rst}-${jsl.colors.fg.yellow} Paused ` : ""}${jsl.colors.rst}\n`);
+        consoleTxt.push(`${jsl.colors.fg.cyan}${name} ${headerExtraTxt}${jsl.colors.rst}\n`);
 
     //#SECTION apply padding at the top
     for(let i = 0; i < (verPadding[0] - 1); i++)
@@ -519,6 +550,16 @@ function drawGame(pattern, initial, name, ignorePaused)
                 rowEmptyFlag = false;
             }
 
+            if(markCursor && i == editorCursorPos[0] && j == editorCursorPos[1])
+                cellColor += cursorColor;
+            else if(markCursor && (i != editorCursorPos[0] || j != editorCursorPos[1]))
+            {
+                if(pattern[i][j] == 1)
+                    cellColor = aliveCellColor;
+                else
+                    cellColor = deadCellColor;
+            }
+
             if(i == 5 && j == 61)
                 jsl.unused("breakpoint");
 
@@ -550,16 +591,123 @@ function drawGame(pattern, initial, name, ignorePaused)
     }
     consoleTxt.push(`${btmRowConsole}\n`);
 
+    return consoleTxt;
+}
+
+//#MARKER editor
+/**
+ * Opens the live editor on the current `field`
+ * Note: removes all `stdin` listeners!
+ */
+function openEditor()
+{
+    process.stdin.removeAllListeners(["keypress"]);
+
     if(!gamePaused)
-        consoleTxt.push(`\n[Space] Pause - [◄ ►] Change Speed - [Escape] Menu `);
-    else
-        consoleTxt.push(`\n[Space] Play - [◄ ►] Change Speed - [Escape] Menu `);
+        gamePaused = true;
 
-    let textToLog = consoleTxt.reduce((acc, val) => acc + val);
+    registerEditorControls();
 
-    process.stdout.write(textToLog);
+    redrawEditor();
+}
 
-    setTerminalTitle(`${settings.info.name} - ${name}${gamePaused ? " - Paused " : ""}`);
+/**
+ * Registers the async listeners for the editor controls
+ */
+function registerEditorControls()
+{
+    process.stdin.setRawMode(true);
+
+    let onCooldown = false;
+
+    process.stdin.on("keypress", (char, key) => {
+        jsl.unused(char);
+        
+        if(onCooldown || !key)
+            return;
+
+        onCooldown = true;
+        setTimeout(() => {
+            onCooldown = false;
+        }, settings.game.inputCooldown);
+
+        let gameFieldSize = getFieldSize();
+        
+        switch(key.name)
+        {
+            case "c": // exit process if CTRL+C is pressed
+                if(key.ctrl === true)
+                    process.exit(0);
+            break;
+            // TODO: cursor position is kinda fucky atm (can go off screen)
+            case "a":
+            case "left":
+                if(editorCursorPos[1] > 0)
+                    editorCursorPos[1]--;
+
+                redrawEditor();
+            break;
+            case "d":
+            case "right":
+                if(editorCursorPos[1] < gameFieldSize[0])
+                    editorCursorPos[1]++;
+
+                redrawEditor();
+            break;
+            case "w":
+            case "up":
+                if(editorCursorPos[0] > 0)
+                    editorCursorPos[0]--;
+
+                redrawEditor();
+            break;
+            case "s":
+            case "down":
+                if(editorCursorPos[0] < gameFieldSize[1])
+                    editorCursorPos[0]++;
+
+                redrawEditor();
+            break;
+            case "return":
+            case "space":
+            {
+                // TODO: cell modification is "laggy" and some cells don't stay changed
+                let curField = field[editorCursorPos[0]][editorCursorPos[1]];
+
+                if(curField == 0)
+                    field[editorCursorPos[0]][editorCursorPos[1]] = 1;
+                else
+                    field[editorCursorPos[0]][editorCursorPos[1]] = 0;
+
+                redrawEditor();
+            }
+            break;
+            case "escape":
+                // TODO: exits to main menu instead of back to the game
+                removeControlEvents();
+                gameActive = true;
+                gamePaused = true;
+                
+                startGame(true);
+            break;
+        }
+    });
+    process.stdin.resume();
+}
+
+/**
+ * Redraws the current frame as if the editor is opened
+ */
+function redrawEditor()
+{
+    let pattern = JSON.parse(JSON.stringify(field)); // reserialize to lose reference
+    let drawnGameField = drawActualField("Editor", pattern, false, true);
+
+    drawnGameField.push(`\n[▲ ▼ ◄ ►] Move Cursor - [Space / Return] Toggle Cell - [Escape] Exit Editor `);
+
+    clearConsole();
+
+    process.stdout.write(drawnGameField.join(""));
 }
 
 //#MARKER events
@@ -582,7 +730,7 @@ function registerControls()
         setTimeout(() => {
             onCooldown = false;
         }, settings.game.inputCooldown);
-        
+
         switch(key.name)
         {
             case "space": // pause / unpause
@@ -612,7 +760,9 @@ function registerControls()
             case "e":
                 if(!gamePaused)
                     gamePaused = true;
-                // TODO: live editor
+                
+                process.stdin.removeAllListeners(["keypress"]);
+                openEditor();
             break;
             case "escape":
                 process.stdin.removeAllListeners(["keypress"]);
@@ -1213,7 +1363,7 @@ function clearConsole()
     }
 }
 
-//#SECTION terminal-related shit
+//#SECTION terminal related shit
 /**
  * Sets the title of the terminal window
  * @param {String} title
